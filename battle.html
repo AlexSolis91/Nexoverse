@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nexoverse — Batalla</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><a href="index.html" style="text-decoration:none;color:inherit;">NEXOVERSE</a></div>
+    <div id="controls"></div>
+  </div>
+
+  <div class="container" style="max-width:1300px;">
+    <div class="phase-bar" id="phaseBar"></div>
+    <div class="turn-indicator" id="turnIndicator">Preparando partida…</div>
+
+    <div id="setupArea" class="notice" style="margin-top:20px;"></div>
+
+    <div class="field-layout" id="fieldLayout" style="display:none;">
+      <div class="board">
+        <div class="player-row top">
+          <div class="deck-box" id="rivalDeck">Mazo Rival</div>
+          <div class="hand-row" id="rivalHand"></div>
+          <div class="grave-box" id="rivalGrave">Zona de<br>los Muertos</div>
+        </div>
+        <div class="field-slots" id="rivalField"></div>
+        <div class="field-slots" id="jugadorField"></div>
+        <div class="player-row">
+          <div class="deck-box" id="jugadorDeck">Mazo</div>
+          <div class="hand-row" id="jugadorHand"></div>
+          <div class="grave-box" id="jugadorGrave">Zona de<br>los Muertos</div>
+        </div>
+        <div class="log-box" id="logBox"></div>
+      </div>
+      <div class="side-panel" id="sidePanel">
+        <h3>Información</h3>
+        <p style="color:var(--text-dim); font-size:13px;">Pasa el cursor sobre una carta para ver sus detalles.</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/wallet.js"></script>
+  <script src="js/data-client.js"></script>
+  <script src="js/engine/damage-engine.js"></script>
+  <script src="js/engine/effects-engine.js"></script>
+  <script src="js/battle.js"></script>
+</body>
+</html>

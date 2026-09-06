@@ -1,0 +1,25 @@
+{
+  "orden": ["comun", "raro", "especial", "epico", "legendario"],
+  "colores": {
+    "comun": "#e8e8e8",
+    "raro": "#3b82f6",
+    "especial": "#f97316",
+    "epico": "#a855f7",
+    "legendario": "#ffd700"
+  },
+  "nombres": {
+    "comun": "Común",
+    "raro": "Raro",
+    "especial": "Especial",
+    "epico": "Épico",
+    "legendario": "Legendario"
+  },
+  "efectosDesbloqueados": {
+    "comun": 1,
+    "raro": 2,
+    "especial": 3,
+    "epico": 4,
+    "legendario": 5
+  },
+  "upgrade": { "cartasRequeridas": 5, "cartasConsumidas": 4 }
+}

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nexoverse — Colección</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><a href="index.html" style="text-decoration:none;color:inherit;">NEXOVERSE</a></div>
+    <div class="wallet"><span class="gold" id="goldDisplay">0 Oro</span></div>
+  </div>
+
+  <div class="container">
+    <div class="section-title">Tu Colección</div>
+    <div class="section-sub">Personajes y equipo que has obtenido</div>
+    <div id="grid" style="display:flex; flex-wrap:wrap; gap:16px;"></div>
+    <div id="empty" class="notice" style="display:none; margin-top:20px;">
+      Aún no tienes cartas. Ve al Mercado y abre un cofre.
+    </div>
+  </div>
+
+  <script src="js/wallet.js"></script>
+  <script src="js/data-client.js"></script>
+  <script>
+    document.getElementById('goldDisplay').textContent = NexoPlayer.getOro().toLocaleString('es-MX') + ' Oro';
+
+    async function render() {
+      const coleccion = NexoPlayer.getCollection();
+      const grid = document.getElementById('grid');
+      if (coleccion.length === 0) {
+        document.getElementById('empty').style.display = 'block';
+        return;
+      }
+      const [chars, equip] = await Promise.all([NexoData.characters(), NexoData.equipment()]);
+      const byId = {};
+      chars.forEach(c => byId[c.id] = { ...c, tipoCarta: 'personaje' });
+      equip.forEach(e => byId[e.id] = { ...e, tipoCarta: 'equipo' });
+
+      // contar copias
+      const counts = {};
+      coleccion.forEach(entry => {
+        const key = entry.cardId + '|' + entry.rareza;
+        counts[key] = (counts[key] || 0) + 1;
+      });
+
+      Object.entries(counts).forEach(([key, count]) => {
+        const [cardId, rareza] = key.split('|');
+        const card = byId[cardId];
+        if (!card) return;
+        const div = document.createElement('div');
+        div.className = `card ${rareza}`;
+        div.innerHTML = `
+          <div class="art">${card.tipoCarta === 'equipo' ? '🗡️' : '🂠'}</div>
+          <div class="info">
+            <div class="name">${card.nombre} ${count > 1 ? `x${count}` : ''}</div>
+            <div class="rarity">${rareza}</div>
+          </div>`;
+        grid.appendChild(div);
+      });
+    }
+    render();
+  </script>
+</body>
+</html>

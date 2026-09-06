@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nexoverse — Mercado</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><a href="index.html" style="text-decoration:none;color:inherit;">NEXOVERSE</a></div>
+    <div class="wallet"><span class="gold" id="goldDisplay">0 Oro</span></div>
+  </div>
+
+  <div class="container">
+    <div class="section-title">Mercado</div>
+    <div class="section-sub">Compra cofres para obtener nuevas cartas de personajes y equipo</div>
+
+    <div id="chestsArea" style="display:flex; gap:20px; flex-wrap:wrap;"></div>
+
+    <div id="revealWrap" style="display:none;">
+      <div class="section-title" style="margin-top:50px;">Cartas obtenidas</div>
+      <div class="reveal-area" id="revealArea"></div>
+      <div style="text-align:center; margin-top:24px;">
+        <button class="btn secondary" onclick="location.reload()">Volver al Mercado</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/wallet.js"></script>
+  <script src="js/data-client.js"></script>
+  <script>
+    const goldDisplay = document.getElementById('goldDisplay');
+    function refreshGold() {
+      goldDisplay.textContent = NexoPlayer.getOro().toLocaleString('es-MX') + ' Oro';
+    }
+    refreshGold();
+
+    function pickRarity(probabilidades) {
+      const roll = Math.random() * 100;
+      let acc = 0;
+      for (const [rareza, pct] of Object.entries(probabilidades)) {
+        acc += pct;
+        if (roll <= acc) return rareza;
+      }
+      return 'comun';
+    }
+
+    async function buildPool() {
+      const [chars, equip] = await Promise.all([NexoData.characters(), NexoData.equipment()]);
+      const pool = {};
+      const add = (item, tipo) => {
+        pool[item.rareza] = pool[item.rareza] || [];
+        pool[item.rareza].push({ ...item, tipoCarta: tipo });
+      };
+      chars.forEach(c => add(c, 'personaje'));
+      equip.forEach(e => add(e, 'equipo'));
+      return pool;
+    }
+
+    async function renderChests() {
+      const [chests, rarities] = await Promise.all([NexoData.chests(), NexoData.rarities()]);
+      const area = document.getElementById('chestsArea');
+      area.innerHTML = '';
+      chests.forEach(chest => {
+        const div = document.createElement('div');
+        div.className = 'chest-card';
+        div.innerHTML = `
+          <div class="chest-img">🎁</div>
+          <h3>${chest.nombre}</h3>
+          <div class="cost">${chest.costo.toLocaleString('es-MX')} Oro</div>
+          <button class="btn" data-chest="${chest.id}">Comprar y Abrir</button>
+        `;
+        div.querySelector('button').addEventListener('click', () => openChest(chest));
+        area.appendChild(div);
+      });
+    }
+
+    async function openChest(chest) {
+      if (!NexoPlayer.spendOro(chest.costo)) {
+        alert('No tienes suficiente Oro.');
+        return;
+      }
+      refreshGold();
+
+      const pool = await buildPool();
+      const rarities = await NexoData.rarities();
+      const drops = [];
+      for (let i = 0; i < chest.cartasPorApertura; i++) {
+        const rareza = pickRarity(chest.probabilidades);
+        const candidates = pool[rareza] || [];
+        if (candidates.length === 0) {
+          drops.push({ nombre: '(sin cartas creadas aún)', rareza, tipoCarta: 'vacio' });
+        } else {
+          const card = candidates[Math.floor(Math.random() * candidates.length)];
+          drops.push(card);
+          NexoPlayer.addCard({ cardId: card.id, tipo: card.tipoCarta, rareza: card.rareza });
+        }
+      }
+
+      document.getElementById('chestsArea').style.display = 'none';
+      document.getElementById('revealWrap').style.display = 'block';
+      const area = document.getElementById('revealArea');
+      area.innerHTML = '';
+
+      drops.forEach((card, idx) => {
+        const slot = document.createElement('div');
+        slot.className = 'reveal-slot';
+        slot.innerHTML = `
+          <div class="flip">
+            <div class="reveal-face back">🎴</div>
+            <div class="reveal-face front card ${card.rareza}">
+              <div class="art">${card.tipoCarta === 'equipo' ? '🗡️' : (card.tipoCarta === 'vacio' ? '❔' : '🂠')}</div>
+              <div class="info">
+                <div class="name">${card.nombre}</div>
+                <div class="rarity">${card.rareza}</div>
+              </div>
+            </div>
+          </div>`;
+        area.appendChild(slot);
+        setTimeout(() => slot.classList.add('revealed'), 300 + idx * 350);
+      });
+    }
+
+    renderChests();
+  </script>
+</body>
+</html>

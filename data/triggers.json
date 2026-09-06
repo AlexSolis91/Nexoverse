@@ -1,0 +1,11 @@
+[
+  { "id": "al_golpear", "nombre": "Al golpear a un objetivo" },
+  { "id": "al_recibir_dano", "nombre": "Al recibir daño" },
+  { "id": "al_inicio_de_turno", "nombre": "Al inicio de su turno" },
+  { "id": "al_final_de_turno", "nombre": "Al final de su turno" },
+  { "id": "al_ser_invocado", "nombre": "Al ser invocado" },
+  { "id": "al_morir", "nombre": "Al morir" },
+  { "id": "al_final_de_ronda", "nombre": "Al final de la ronda" },
+  { "id": "al_ejecutar_ataque_basico", "nombre": "Al ejecutar un ataque básico" },
+  { "id": "al_aliado_morir", "nombre": "Cuando un aliado muere" }
+]

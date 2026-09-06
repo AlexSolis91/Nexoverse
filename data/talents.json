@@ -1,0 +1,17 @@
+{
+  "talentos": ["fuerza", "intelecto", "espiritu", "vitalidad", "agilidad"],
+  "puntosPorNivel": 5,
+  "mapeo": {
+    "fuerza":    { "primaria": "danoFisico",    "secundaria": "defensa" },
+    "intelecto": { "primaria": "danoElemental", "secundaria": "sabiduria" },
+    "espiritu":  { "primaria": "danoEspecial",  "secundaria": "roboDeVida" },
+    "vitalidad": { "primaria": "hp",            "secundaria": "regeneracion" },
+    "agilidad":  { "primaria": "velocidad",     "secundaria": "esquivar" }
+  },
+  "puntosPorTalento": { "primaria": 2, "secundaria": 1 },
+  "estadisticasSoloEquipo": [
+    "critico", "bloqueo", "resHielo", "resVeneno", "resFuego", "resRayo", "resEspecial", "armadura"
+  ],
+  "tiposDeDano": ["fisico", "elemental", "especial"],
+  "subtiposElemental": ["hielo", "veneno", "fuego", "rayo"]
+}

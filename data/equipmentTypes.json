@@ -1,0 +1,5 @@
+{
+  "armas": ["Espada", "Hacha", "Arco", "Escudo", "Daga", "Cuchilla", "Báculo", "Vara", "Maza", "Martillo"],
+  "equipacion": ["Armadura", "Botas", "Yelmo", "Cinturón", "Capa", "Hombreras", "Guantes"],
+  "accesorios": ["Anillo", "Collar", "Amuleto", "Pendiente", "Piedra", "Estandarte"]
+}

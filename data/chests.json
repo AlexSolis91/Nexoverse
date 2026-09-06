@@ -1,0 +1,10 @@
+[
+  {
+    "id": "cofre_de_plata",
+    "nombre": "Cofre de Plata",
+    "costo": 1000,
+    "moneda": "oro",
+    "cartasPorApertura": 3,
+    "probabilidades": { "comun": 98, "raro": 2, "especial": 0, "epico": 0, "legendario": 0 }
+  }
+]

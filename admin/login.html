@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nexoverse — Admin</title>
+<link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><a href="../index.html" style="text-decoration:none;color:inherit;">NEXOVERSE</a></div>
+  </div>
+  <div class="container" style="max-width:420px;">
+    <div class="section-title">Panel de Creador</div>
+    <div class="section-sub">Acceso restringido — solo para el diseñador del juego</div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="pw" />
+    </div>
+    <button class="btn" style="margin-top:14px;" onclick="tryLogin()">Entrar</button>
+    <div id="msg" class="notice error" style="display:none; margin-top:14px;">Contraseña incorrecta.</div>
+    <div class="notice" style="margin-top:20px;">
+      Nota: esta herramienta necesita el servidor local (<code>npm run dev</code>) corriendo para poder
+      guardar personajes y equipo en el repositorio. En la versión publicada del juego esta sección no
+      podrá guardar cambios.
+    </div>
+  </div>
+  <script>
+    const ADMIN_PASSWORD = 'nexoverse-admin';
+    function tryLogin() {
+      const pw = document.getElementById('pw').value;
+      if (pw === ADMIN_PASSWORD) {
+        sessionStorage.setItem('nexo_admin_ok', '1');
+        location.href = 'dashboard.html';
+      } else {
+        document.getElementById('msg').style.display = 'block';
+      }
+    }
+    document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
+  </script>
+</body>
+</html>

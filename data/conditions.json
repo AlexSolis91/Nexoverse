@@ -1,0 +1,8 @@
+[
+  { "id": "siempre", "nombre": "Sin condición (siempre se cumple)", "params": [] },
+  { "id": "objetivo_menos_hp_que_ejecutor", "nombre": "El objetivo tiene menos HP que el ejecutor", "params": [] },
+  { "id": "ejecutor_hp_menor_a_pct", "nombre": "El HP propio está por debajo de X%", "params": ["pct"] },
+  { "id": "objetivo_hp_mayor_a_ejecutor", "nombre": "El objetivo tiene más HP que el ejecutor", "params": [] },
+  { "id": "objetivo_tiene_efecto", "nombre": "El objetivo tiene el efecto X", "params": ["efectoId"] },
+  { "id": "ejecutor_tiene_efecto", "nombre": "El ejecutor tiene el efecto X", "params": ["efectoId"] }
+]

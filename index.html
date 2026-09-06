@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nexoverse</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">NEXOVERSE</div>
+    <div class="wallet"><span class="gold" id="goldDisplay">0 Oro</span></div>
+  </div>
+
+  <div class="container">
+    <div class="section-title">Menú Principal</div>
+    <div class="section-sub">Elige un modo de juego</div>
+
+    <div class="menu-grid">
+      <a class="menu-card" href="battle.html">
+        <span class="icon">⚔️</span>
+        <h3>Batalla</h3>
+        <p>Juega una partida con tu colección de personajes</p>
+      </a>
+      <a class="menu-card" href="market.html">
+        <span class="icon">🏪</span>
+        <h3>Mercado</h3>
+        <p>Compra y abre cofres de cartas</p>
+      </a>
+      <a class="menu-card" href="collection.html">
+        <span class="icon">🗂️</span>
+        <h3>Colección</h3>
+        <p>Revisa tus personajes y equipo obtenidos</p>
+      </a>
+      <a class="menu-card" href="admin/login.html">
+        <span class="icon">🛠️</span>
+        <h3>Creador (Admin)</h3>
+        <p>Crea personajes, equipo y efectos nuevos</p>
+      </a>
+    </div>
+  </div>
+
+  <script src="js/wallet.js"></script>
+  <script>
+    document.getElementById('goldDisplay').textContent = NexoPlayer.getOro().toLocaleString('es-MX') + ' Oro';
+  </script>
+</body>
+</html>
