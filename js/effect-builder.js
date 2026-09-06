@@ -43,141 +43,195 @@ const NexoTargetOptions = [
   { id: 'todosEnemigos', nombre: 'Todos los enemigos' },
 ];
 
-async function renderEffectSlots(container, { count = 5, unlockCounts, initial = [] } = {}) {
+let _effectRegistryCache = null;
+async function loadEffectRegistries() {
+  if (_effectRegistryCache) return _effectRegistryCache;
   const [effectsData, triggers, conditions] = await Promise.all([
     NexoData.effects(), NexoData.triggers(), NexoData.conditions()
   ]);
-  const estadoOpts = effectsData.efectosDeEstado;
-  const buffOpts = effectsData.buffs;
-  const debuffOpts = effectsData.debuffs;
+  _effectRegistryCache = {
+    estadoOpts: effectsData.efectosDeEstado,
+    buffOpts: effectsData.buffs,
+    debuffOpts: effectsData.debuffs,
+    triggers, conditions,
+  };
+  return _effectRegistryCache;
+}
 
+// Construye UN bloque editable de Gatillo->Condición->Acción / Bono Pasivo, ya cableado
+// con sus listeners. Lo usan tanto las 5 pasivas (cantidad fija por rareza) como los
+// efectos adicionales de los movimientos (lista libre, se puede agregar/quitar).
+function buildEffectSlotNode(reg, data, headerHtml) {
+  const { estadoOpts, buffOpts, debuffOpts, triggers, conditions } = reg;
+  const slot = document.createElement('div');
+  slot.className = 'effect-slot';
+  slot.innerHTML = `
+    ${headerHtml || ''}
+    <div class="block-box" style="margin:6px 0 14px;">
+      <div class="row">
+        <div class="field">
+          <label>Modo</label>
+          <select class="f-modo">
+            <option value="pasivo">Bono pasivo de estadística (siempre activo)</option>
+            <option value="tce">Gatillo → Condición → Acción</option>
+          </select>
+        </div>
+      </div>
+      <div class="modo-pasivo">
+        <div class="row">
+          <div class="field">
+            <label>Estadística</label>
+            <select class="f-stat">${NexoStatOptions.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <label>Valor (%, o puntos si aplica)</label>
+            <input type="number" class="f-valor" value="10" />
+          </div>
+        </div>
+      </div>
+      <div class="modo-tce" style="display:none;">
+        <div class="row">
+          <div class="field">
+            <label>Gatillo</label>
+            <select class="f-gatillo">${triggers.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <label>Condición</label>
+            <select class="f-condicion">${conditions.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Acción</label>
+            <select class="f-accion">
+              <option value="efectoEstado">Aplicar Efecto de Estado</option>
+              <option value="buff">Aplicar Buff</option>
+              <option value="debuff">Aplicar Debuff</option>
+              <option value="dano">Infligir Daño</option>
+              <option value="cargas">Generar Cargas</option>
+              <option value="curar">Curar</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Objetivo</label>
+            <select class="f-objetivo">${NexoTargetOptions.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="row accion-params"></div>
+      </div>
+    </div>
+  `;
+
+  const modoSel = slot.querySelector('.f-modo');
+  const pasivoBox = slot.querySelector('.modo-pasivo');
+  const tceBox = slot.querySelector('.modo-tce');
+  modoSel.addEventListener('change', () => {
+    pasivoBox.style.display = modoSel.value === 'pasivo' ? '' : 'none';
+    tceBox.style.display = modoSel.value === 'tce' ? '' : 'none';
+  });
+
+  const accionSel = slot.querySelector('.f-accion');
+  const paramsBox = slot.querySelector('.accion-params');
+  function renderAccionParams() {
+    const tipo = accionSel.value;
+    if (tipo === 'efectoEstado') {
+      paramsBox.innerHTML = `
+        <div class="field"><label>Efecto</label><select class="f-efecto-id">${estadoOpts.map(e => `<option value="${e.id}">${e.nombre}</option>`).join('')}</select></div>
+        <div class="field"><label>% (si aplica)</label><input type="number" class="f-pct" value="10" /></div>`;
+    } else if (tipo === 'buff') {
+      paramsBox.innerHTML = `
+        <div class="field"><label>Buff</label><select class="f-efecto-id">${buffOpts.map(e => `<option value="${e.id}">${e.nombre}</option>`).join('')}</select></div>
+        <div class="field"><label>% de incremento</label><input type="number" class="f-pct" value="10" /></div>`;
+    } else if (tipo === 'debuff') {
+      paramsBox.innerHTML = `
+        <div class="field"><label>Debuff</label><select class="f-efecto-id">${debuffOpts.map(e => `<option value="${e.id}">${e.nombre}</option>`).join('')}</select></div>
+        <div class="field"><label>% de reducción</label><input type="number" class="f-pct" value="10" /></div>`;
+    } else if (tipo === 'dano') {
+      paramsBox.innerHTML = `
+        <div class="field"><label>Tipo de Daño</label><select class="f-tipodano"><option value="fisico">Físico</option><option value="elemental">Elemental</option><option value="especial">Especial</option></select></div>
+        <div class="field"><label>Sub-tipo elemental (opcional)</label><select class="f-subtipo"><option value="">—</option><option value="hielo">Hielo</option><option value="veneno">Veneno</option><option value="fuego">Fuego</option><option value="rayo">Rayo</option></select></div>
+        <div class="field"><label>% del stat de daño</label><input type="number" class="f-pct" value="100" /></div>`;
+    } else if (tipo === 'cargas') {
+      paramsBox.innerHTML = `<div class="field"><label>Cantidad de Cargas</label><input type="number" class="f-pct" value="5" /></div>`;
+    } else if (tipo === 'curar') {
+      paramsBox.innerHTML = `<div class="field"><label>% de curación (sobre HP máximo)</label><input type="number" class="f-pct" value="10" /></div>`;
+    }
+  }
+  accionSel.addEventListener('change', renderAccionParams);
+  renderAccionParams();
+
+  if (data) {
+    modoSel.value = data.modo || 'pasivo';
+    modoSel.dispatchEvent(new Event('change'));
+    if (data.modo === 'pasivo') {
+      slot.querySelector('.f-stat').value = data.stat || 'danoFisico';
+      slot.querySelector('.f-valor').value = data.valor ?? 10;
+    } else if (data.modo === 'tce') {
+      slot.querySelector('.f-gatillo').value = data.gatillo || '';
+      slot.querySelector('.f-condicion').value = data.condicion || 'siempre';
+      accionSel.value = data.accion?.tipo || 'efectoEstado';
+      accionSel.dispatchEvent(new Event('change'));
+      slot.querySelector('.f-objetivo').value = data.objetivo || 'objetivo';
+      const idSel = slot.querySelector('.f-efecto-id');
+      if (idSel && data.accion?.id) idSel.value = data.accion.id;
+      const pctInput = slot.querySelector('.f-pct');
+      if (pctInput && data.accion?.pct != null) pctInput.value = data.accion.pct;
+      const tipoDanoSel = slot.querySelector('.f-tipodano');
+      if (tipoDanoSel && data.accion?.tipoDano) tipoDanoSel.value = data.accion.tipoDano;
+      const subtipoSel = slot.querySelector('.f-subtipo');
+      if (subtipoSel && data.accion?.subtipo) subtipoSel.value = data.accion.subtipo;
+    }
+  }
+  return slot;
+}
+
+// Lista fija de N slots (usada por las 5 pasivas, desbloqueo por rareza).
+async function renderEffectSlots(container, { count = 5, unlockCounts, initial = [] } = {}) {
+  const reg = await loadEffectRegistries();
   container.innerHTML = '';
   for (let i = 0; i < count; i++) {
     const rarezaQueDesbloquea = unlockCounts ? Object.entries(unlockCounts).find(([r, n]) => n === i + 1) : null;
-    const slot = document.createElement('div');
-    slot.className = 'effect-slot';
+    const header = `<div class="tag">Efecto ${i + 1} ${rarezaQueDesbloquea ? `— se desbloquea en rareza ${rarezaQueDesbloquea[0]}` : ''}</div>`;
+    const slot = buildEffectSlotNode(reg, initial[i], header);
     slot.dataset.index = i;
-    slot.innerHTML = `
-      <div class="tag">Efecto ${i + 1} ${rarezaQueDesbloquea ? `— se desbloquea en rareza ${rarezaQueDesbloquea[0]}` : ''}</div>
-      <div class="block-box" style="margin:6px 0 14px;">
-        <div class="row">
-          <div class="field">
-            <label>Modo</label>
-            <select class="f-modo">
-              <option value="pasivo">Bono pasivo de estadística (siempre activo)</option>
-              <option value="tce">Gatillo → Condición → Acción</option>
-            </select>
-          </div>
-        </div>
-        <div class="modo-pasivo">
-          <div class="row">
-            <div class="field">
-              <label>Estadística</label>
-              <select class="f-stat">${NexoStatOptions.map(s => `<option value="${s.id}">${s.nombre}</option>`).join('')}</select>
-            </div>
-            <div class="field">
-              <label>Valor (%, o puntos si aplica)</label>
-              <input type="number" class="f-valor" value="10" />
-            </div>
-          </div>
-        </div>
-        <div class="modo-tce" style="display:none;">
-          <div class="row">
-            <div class="field">
-              <label>Gatillo</label>
-              <select class="f-gatillo">${triggers.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('')}</select>
-            </div>
-            <div class="field">
-              <label>Condición</label>
-              <select class="f-condicion">${conditions.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('')}</select>
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label>Acción</label>
-              <select class="f-accion">
-                <option value="efectoEstado">Aplicar Efecto de Estado</option>
-                <option value="buff">Aplicar Buff</option>
-                <option value="debuff">Aplicar Debuff</option>
-                <option value="dano">Infligir Daño</option>
-                <option value="cargas">Generar Cargas</option>
-                <option value="curar">Curar</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Objetivo</label>
-              <select class="f-objetivo">${NexoTargetOptions.map(t => `<option value="${t.id}">${t.nombre}</option>`).join('')}</select>
-            </div>
-          </div>
-          <div class="row accion-params"></div>
-        </div>
-      </div>
-    `;
     container.appendChild(slot);
-
-    const modoSel = slot.querySelector('.f-modo');
-    const pasivoBox = slot.querySelector('.modo-pasivo');
-    const tceBox = slot.querySelector('.modo-tce');
-    modoSel.addEventListener('change', () => {
-      pasivoBox.style.display = modoSel.value === 'pasivo' ? '' : 'none';
-      tceBox.style.display = modoSel.value === 'tce' ? '' : 'none';
-    });
-
-    const accionSel = slot.querySelector('.f-accion');
-    const paramsBox = slot.querySelector('.accion-params');
-    function renderAccionParams() {
-      const tipo = accionSel.value;
-      if (tipo === 'efectoEstado') {
-        paramsBox.innerHTML = `
-          <div class="field"><label>Efecto</label><select class="f-efecto-id">${estadoOpts.map(e => `<option value="${e.id}">${e.nombre}</option>`).join('')}</select></div>
-          <div class="field"><label>% (si aplica)</label><input type="number" class="f-pct" value="10" /></div>`;
-      } else if (tipo === 'buff') {
-        paramsBox.innerHTML = `
-          <div class="field"><label>Buff</label><select class="f-efecto-id">${buffOpts.map(e => `<option value="${e.id}">${e.nombre}</option>`).join('')}</select></div>
-          <div class="field"><label>% de incremento</label><input type="number" class="f-pct" value="10" /></div>`;
-      } else if (tipo === 'debuff') {
-        paramsBox.innerHTML = `
-          <div class="field"><label>Debuff</label><select class="f-efecto-id">${debuffOpts.map(e => `<option value="${e.id}">${e.nombre}</option>`).join('')}</select></div>
-          <div class="field"><label>% de reducción</label><input type="number" class="f-pct" value="10" /></div>`;
-      } else if (tipo === 'dano') {
-        paramsBox.innerHTML = `
-          <div class="field"><label>Tipo de Daño</label><select class="f-tipodano"><option value="fisico">Físico</option><option value="elemental">Elemental</option><option value="especial">Especial</option></select></div>
-          <div class="field"><label>Sub-tipo elemental (opcional)</label><select class="f-subtipo"><option value="">—</option><option value="hielo">Hielo</option><option value="veneno">Veneno</option><option value="fuego">Fuego</option><option value="rayo">Rayo</option></select></div>
-          <div class="field"><label>% del stat de daño</label><input type="number" class="f-pct" value="100" /></div>`;
-      } else if (tipo === 'cargas') {
-        paramsBox.innerHTML = `<div class="field"><label>Cantidad de Cargas</label><input type="number" class="f-pct" value="5" /></div>`;
-      } else if (tipo === 'curar') {
-        paramsBox.innerHTML = `<div class="field"><label>% de curación (sobre HP máximo)</label><input type="number" class="f-pct" value="10" /></div>`;
-      }
-    }
-    accionSel.addEventListener('change', renderAccionParams);
-    renderAccionParams();
-
-    // aplicar valores iniciales si se está editando una carta existente
-    const data = initial[i];
-    if (data) {
-      modoSel.value = data.modo || 'pasivo';
-      modoSel.dispatchEvent(new Event('change'));
-      if (data.modo === 'pasivo') {
-        slot.querySelector('.f-stat').value = data.stat || 'danoFisico';
-        slot.querySelector('.f-valor').value = data.valor ?? 10;
-      } else if (data.modo === 'tce') {
-        slot.querySelector('.f-gatillo').value = data.gatillo || '';
-        slot.querySelector('.f-condicion').value = data.condicion || 'siempre';
-        accionSel.value = data.accion?.tipo || 'efectoEstado';
-        accionSel.dispatchEvent(new Event('change'));
-        slot.querySelector('.f-objetivo').value = data.objetivo || 'objetivo';
-        const idSel = slot.querySelector('.f-efecto-id');
-        if (idSel && data.accion?.id) idSel.value = data.accion.id;
-        const pctInput = slot.querySelector('.f-pct');
-        if (pctInput && data.accion?.pct != null) pctInput.value = data.accion.pct;
-        const tipoDanoSel = slot.querySelector('.f-tipodano');
-        if (tipoDanoSel && data.accion?.tipoDano) tipoDanoSel.value = data.accion.tipoDano;
-        const subtipoSel = slot.querySelector('.f-subtipo');
-        if (subtipoSel && data.accion?.subtipo) subtipoSel.value = data.accion.subtipo;
-      }
-    }
   }
+}
+
+// Lista libre (agregar/quitar) de efectos adicionales. Usada por cada Movimiento, para
+// que un movimiento pueda, además de su daño base, aplicar efectos de estado/buffs/debuffs
+// bajo el mismo sistema universal de Gatillo->Condición->Acción que ya usan pasivas y equipo.
+async function renderEffectList(container, initial = []) {
+  const reg = await loadEffectRegistries();
+  container.innerHTML = '';
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'btn secondary';
+  addBtn.textContent = '+ Agregar Efecto';
+
+  function addSlot(data) {
+    const idx = container.querySelectorAll('.effect-slot').length;
+    const header = `<div class="tag">Efecto adicional ${idx + 1}
+      <button type="button" class="btn danger" style="float:right;padding:2px 10px;font-size:11px;">Quitar</button>
+    </div>`;
+    const slot = buildEffectSlotNode(reg, data, header);
+    slot.querySelector('.tag button').addEventListener('click', () => {
+      slot.remove();
+      renumber();
+    });
+    container.insertBefore(slot, addBtn);
+  }
+
+  function renumber() {
+    container.querySelectorAll('.effect-slot .tag').forEach((tag, i) => {
+      tag.childNodes[0].textContent = `Efecto adicional ${i + 1} `;
+    });
+  }
+
+  addBtn.addEventListener('click', () => { addSlot(); renumber(); });
+  container.appendChild(addBtn);
+  initial.forEach(addSlot);
 }
 
 // Todo personaje tiene exactamente 4 movimientos, en este orden fijo:
@@ -189,9 +243,10 @@ const NexoMoveRoles = [
   { rol: 'ultimate', etiqueta: 'Movimiento 4 — Ultimate', costoDefault: 6 },
 ];
 
-function renderMovimientoSlots(container, initial = []) {
+async function renderMovimientoSlots(container, initial = []) {
   container.innerHTML = '';
-  NexoMoveRoles.forEach((info, i) => {
+  for (let i = 0; i < NexoMoveRoles.length; i++) {
+    const info = NexoMoveRoles[i];
     const data = initial[i];
     const slot = document.createElement('div');
     slot.className = 'block-box';
@@ -218,11 +273,16 @@ function renderMovimientoSlots(container, initial = []) {
         </div>
         <div class="field"><label>% del stat de daño</label><input type="number" class="mv-pct" value="${data?.porcentaje ?? 100}" /></div>
       </div>
+      <div class="field">
+        <label>Efectos adicionales (Gatillo → Condición → Acción, opcional)</label>
+        <div class="effects-list mv-efectos"></div>
+      </div>
     `;
     if (data?.objetivo) slot.querySelector('.mv-objetivo').value = data.objetivo;
     if (data?.tipoDano) slot.querySelector('.mv-tipo').value = data.tipoDano;
     container.appendChild(slot);
-  });
+    await renderEffectList(slot.querySelector('.mv-efectos'), data?.efectos || []);
+  }
 }
 
 function serializeMovimientoSlots(container) {
@@ -234,6 +294,7 @@ function serializeMovimientoSlots(container) {
     cargasGeneradas: Number(slot.querySelector('.mv-genera').value) || 0,
     tipoDano: slot.querySelector('.mv-tipo').value,
     porcentaje: Number(slot.querySelector('.mv-pct').value) || 0,
+    efectos: serializeEffectSlots(slot.querySelector('.mv-efectos')),
   }));
 }
 

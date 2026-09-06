@@ -180,12 +180,16 @@ function livingEnemies(personaje) {
   return state[enemigoLado].campo.filter(c => c && c.vivo);
 }
 
-function checkPassives(personaje, gatilloId, contexto) {
-  for (const pasiva of personaje.pasivas) {
-    if (pasiva.modo !== 'tce' || pasiva.gatillo !== gatilloId) continue;
-    if (!evaluarCondicion(pasiva.condicion, personaje, contexto)) continue;
-    ejecutarAccion(pasiva.accion, personaje, contexto, pasiva.objetivo);
+function checkEffectsList(lista, personaje, gatilloId, contexto) {
+  for (const item of lista || []) {
+    if (item.modo !== 'tce' || item.gatillo !== gatilloId) continue;
+    if (!evaluarCondicion(item.condicion, personaje, contexto)) continue;
+    ejecutarAccion(item.accion, personaje, contexto, item.objetivo);
   }
+}
+
+function checkPassives(personaje, gatilloId, contexto) {
+  checkEffectsList(personaje.pasivas, personaje, gatilloId, contexto);
 }
 
 function evaluarCondicion(condId, personaje, contexto) {
@@ -303,6 +307,7 @@ function turnoDe(personaje) {
   const cantidad = NexoDamage.calcularYAplicarDano(personaje, objetivo, ab.tipoDano, ab.porcentaje, null, log, extraMod);
   log(`${personaje.nombre} usa ${ab.nombre || 'Ataque Básico'} sobre ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${ab.tipoDano}.`);
   checkPassives(personaje, 'al_golpear', { objetivo });
+  checkEffectsList(ab.efectos, personaje, 'al_golpear', { objetivo });
   checkPassives(objetivo, 'al_recibir_dano', { objetivo: personaje });
   checkMuerte(objetivo);
 }
@@ -420,7 +425,7 @@ function showSidePanel(instanceId) {
       </tbody>
     </table>
     <h4>Movimientos</h4>
-    ${(c.movimientos || []).map(m => `<div class="notice"><strong>${m.nombre || '(sin nombre)'}</strong> — ${m.rol} — ${m.porcentaje}% Daño ${m.tipoDano} — Objetivo: ${m.objetivo} — Cargas: -${m.costoCargas} / +${m.cargasGeneradas}</div>`).join('') || '<div class="notice">Sin movimientos definidos</div>'}
+    ${(c.movimientos || []).map(m => `<div class="notice"><strong>${m.nombre || '(sin nombre)'}</strong> — ${m.rol} — ${m.porcentaje}% Daño ${m.tipoDano} — Objetivo: ${m.objetivo} — Cargas: -${m.costoCargas} / +${m.cargasGeneradas}${(m.efectos && m.efectos.length) ? ` — ${m.efectos.length} efecto(s) adicional(es)` : ''}</div>`).join('') || '<div class="notice">Sin movimientos definidos</div>'}
     <h4>Pasivas activas (${c.pasivas.length})</h4>
     ${c.pasivas.map((p, i) => `<div class="notice">${i + 1}. ${p.modo === 'pasivo' ? `+${p.valor} ${p.stat}` : `${p.gatillo} → ${p.accion.tipo}`}</div>`).join('') || '<div class="notice">Ninguna</div>'}
     <h4>Efectos activos</h4>

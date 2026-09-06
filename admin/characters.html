@@ -86,7 +86,7 @@
 
     let editingId = null;
     async function init() {
-      renderMovimientoSlots(document.getElementById('movimientos'));
+      await renderMovimientoSlots(document.getElementById('movimientos'));
       const rarities = await NexoData.rarities();
       await renderEffectSlots(document.getElementById('effectSlots'), {
         count: 5, unlockCounts: rarities.efectosDesbloqueados
@@ -116,7 +116,7 @@
       document.getElementById('rareza').value = c.rareza;
       document.getElementById('imagenUrl').value = c.imagenUrl || '';
       updatePreview();
-      renderMovimientoSlots(document.getElementById('movimientos'), c.movimientos || []);
+      await renderMovimientoSlots(document.getElementById('movimientos'), c.movimientos || []);
       const rarities = await NexoData.rarities();
       await renderEffectSlots(document.getElementById('effectSlots'), {
         count: 5, unlockCounts: rarities.efectosDesbloqueados, initial: c.pasivas || []
