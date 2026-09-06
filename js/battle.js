@@ -48,7 +48,7 @@ function makeBattleCharacter(template, rareza, lado, talentsCfg, unlockCounts) {
     instanceId: template.id + '_' + Math.random().toString(36).slice(2, 8),
     templateId: template.id,
     nombre: template.nombre,
-    icono: template.icono || '🧙',
+    imagenUrl: template.imagenUrl || '',
     rareza,
     lado,
     stats,
@@ -370,11 +370,17 @@ function renderAll() {
   renderLog();
 }
 
+function cardArt(c, size) {
+  return c.imagenUrl
+    ? `<img src="${c.imagenUrl}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />`
+    : `<span style="font-size:${size || 22}px;">🧙</span>`;
+}
+
 function renderHand(lado, oculto = false) {
   const el = document.getElementById(lado + 'Hand');
   el.innerHTML = state[lado].mano.map((c, idx) => `
     <div class="card ${c.rareza}" style="width:70px;cursor:pointer;" onclick="${lado === 'jugador' && state.fase === 'invocacion' ? `summon('jugador', ${idx})` : ''}">
-      <div class="art" style="height:60px;font-size:22px;">${oculto ? '🎴' : c.icono}</div>
+      <div class="art" style="height:60px;font-size:22px;">${oculto ? '🎴' : cardArt(c)}</div>
       ${oculto ? '' : `<div class="info"><div class="name" style="font-size:10px;">${c.nombre}</div></div>`}
     </div>`).join('');
 }
@@ -386,7 +392,7 @@ function renderField(lado) {
     const pct = Math.max(0, c.hpActual / c.hpMaximo * 100);
     return `<div class="field-slot filled card ${c.rareza}" style="height:130px;flex-direction:column;font-size:11px;"
               onmouseenter="showSidePanel('${c.instanceId}')">
-              <div style="font-size:26px;">${c.icono}</div>
+              <div style="width:36px;height:36px;overflow:hidden;border-radius:6px;">${cardArt(c, 26)}</div>
               <div>${c.nombre}</div>
               <div style="width:90%;height:6px;background:#333;border-radius:4px;overflow:hidden;margin-top:4px;">
                 <div style="width:${pct}%;height:100%;background:${pct > 30 ? 'var(--ok)' : 'var(--danger)'};"></div>
@@ -402,7 +408,8 @@ function showSidePanel(instanceId) {
   if (!c) return;
   const panel = document.getElementById('sidePanel');
   panel.innerHTML = `
-    <h3>${c.icono} ${c.nombre}</h3>
+    <div style="width:100%;height:140px;border-radius:8px;overflow:hidden;margin-bottom:10px;background:linear-gradient(160deg,#2a3260,#10142a);display:flex;align-items:center;justify-content:center;">${cardArt(c, 60)}</div>
+    <h3>${c.nombre}</h3>
     <div class="notice">Rareza: ${c.rareza}</div>
     <table class="card-table">
       <tbody>

@@ -110,7 +110,11 @@
           <div class="flip">
             <div class="reveal-face back">🎴</div>
             <div class="reveal-face front card ${card.rareza}">
-              <div class="art">${card.tipoCarta === 'equipo' ? '🗡️' : (card.tipoCarta === 'vacio' ? '❔' : '🂠')}</div>
+              <div class="art">${
+              card.tipoCarta === 'equipo' ? '🗡️' :
+              card.tipoCarta === 'vacio' ? '❔' :
+              card.imagenUrl ? `<img src="${card.imagenUrl}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />` : '🂠'
+            }</div>
               <div class="info">
                 <div class="name">${card.nombre}</div>
                 <div class="rarity">${card.rareza}</div>
