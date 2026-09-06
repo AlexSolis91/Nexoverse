@@ -243,7 +243,8 @@ input, select, textarea {
   flex-direction: column;
   text-align: center;
 }
-.hand-row { display: flex; gap: 8px; }
+.hand-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.deck-cluster { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .field-slots { display: flex; gap: 10px; justify-content: center; }
 .field-slot {
   width: 90px; height: 130px;

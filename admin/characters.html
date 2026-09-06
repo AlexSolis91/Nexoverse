@@ -47,27 +47,8 @@
       </div>
 
       <div class="block-box">
-        <h4>Ataque básico (sin costo de Cargas)</h4>
-        <div class="row">
-          <div class="field">
-            <label>Tipo de daño</label>
-            <select id="abTipo">
-              <option value="fisico">Físico</option>
-              <option value="elemental">Elemental</option>
-              <option value="especial">Especial</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>% del stat de daño correspondiente</label>
-            <input type="number" id="abPct" value="100" />
-          </div>
-        </div>
-      </div>
-
-      <div class="block-box">
-        <h4>Movimientos (cuestan Cargas)</h4>
+        <h4>Movimientos (siempre 4: Básico, Especial, Especial, Ultimate)</h4>
         <div id="movimientos"></div>
-        <button type="button" class="btn secondary" onclick="addMovimiento()">+ Agregar Movimiento</button>
       </div>
 
       <div class="block-box">
@@ -90,43 +71,6 @@
   <script src="../js/data-client.js"></script>
   <script src="../js/effect-builder.js"></script>
   <script>
-    let movCount = 0;
-    function addMovimiento(data) {
-      const wrap = document.getElementById('movimientos');
-      const id = movCount++;
-      const div = document.createElement('div');
-      div.className = 'block-box';
-      div.dataset.movId = id;
-      div.innerHTML = `
-        <div class="row">
-          <div class="field"><label>Nombre</label><input class="mv-nombre" value="${data?.nombre || ''}" /></div>
-          <div class="field"><label>Costo de Cargas</label><input type="number" class="mv-costo" value="${data?.costoCargas ?? 3}" /></div>
-        </div>
-        <div class="row">
-          <div class="field"><label>Tipo de Daño</label>
-            <select class="mv-tipo">
-              <option value="fisico">Físico</option>
-              <option value="elemental">Elemental</option>
-              <option value="especial">Especial</option>
-            </select>
-          </div>
-          <div class="field"><label>% del stat de daño</label><input type="number" class="mv-pct" value="${data?.porcentaje ?? 120}" /></div>
-        </div>
-        <button type="button" class="btn danger" onclick="this.closest('[data-mov-id]').remove()">Quitar</button>
-      `;
-      if (data?.tipoDano) div.querySelector('.mv-tipo').value = data.tipoDano;
-      wrap.appendChild(div);
-    }
-
-    function serializeMovimientos() {
-      return Array.from(document.querySelectorAll('#movimientos [data-mov-id]')).map(div => ({
-        nombre: div.querySelector('.mv-nombre').value,
-        costoCargas: Number(div.querySelector('.mv-costo').value) || 0,
-        tipoDano: div.querySelector('.mv-tipo').value,
-        porcentaje: Number(div.querySelector('.mv-pct').value) || 0,
-      }));
-    }
-
     function updatePreview() {
       const url = document.getElementById('imagenUrl').value.trim();
       const art = document.getElementById('previewArt');
@@ -142,6 +86,7 @@
 
     let editingId = null;
     async function init() {
+      renderMovimientoSlots(document.getElementById('movimientos'));
       const rarities = await NexoData.rarities();
       await renderEffectSlots(document.getElementById('effectSlots'), {
         count: 5, unlockCounts: rarities.efectosDesbloqueados
@@ -171,10 +116,7 @@
       document.getElementById('rareza').value = c.rareza;
       document.getElementById('imagenUrl').value = c.imagenUrl || '';
       updatePreview();
-      document.getElementById('abTipo').value = c.ataqueBasico.tipoDano;
-      document.getElementById('abPct').value = c.ataqueBasico.porcentaje;
-      document.getElementById('movimientos').innerHTML = '';
-      (c.movimientos || []).forEach(addMovimiento);
+      renderMovimientoSlots(document.getElementById('movimientos'), c.movimientos || []);
       const rarities = await NexoData.rarities();
       await renderEffectSlots(document.getElementById('effectSlots'), {
         count: 5, unlockCounts: rarities.efectosDesbloqueados, initial: c.pasivas || []
@@ -201,11 +143,7 @@
         nombre,
         rareza: document.getElementById('rareza').value,
         imagenUrl: document.getElementById('imagenUrl').value.trim(),
-        ataqueBasico: {
-          tipoDano: document.getElementById('abTipo').value,
-          porcentaje: Number(document.getElementById('abPct').value) || 0,
-        },
-        movimientos: serializeMovimientos(),
+        movimientos: serializeMovimientoSlots(document.getElementById('movimientos')),
         pasivas: serializeEffectSlots(document.getElementById('effectSlots')),
       };
       try {

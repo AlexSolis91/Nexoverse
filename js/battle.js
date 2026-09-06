@@ -57,7 +57,6 @@ function makeBattleCharacter(template, rareza, lado, talentsCfg, unlockCounts) {
     armaduraActual: stats.armadura,
     efectos: [],
     vivo: true,
-    ataqueBasico: template.ataqueBasico,
     movimientos: template.movimientos || [],
     pasivas: pasivasActivas,
   };
@@ -89,15 +88,14 @@ async function init() {
   }
 
   const coleccion = NexoPlayer.getCollection().filter(c => c.tipo === 'personaje');
-  let jugadorTemplates;
-  if (coleccion.length > 0) {
-    jugadorTemplates = coleccion.slice(0, 10).map(entry => ({
-      template: characters.find(c => c.id === entry.cardId),
-      rareza: entry.rareza,
-    })).filter(x => x.template);
-  } else {
+  let jugadorTemplates = coleccion.slice(0, 10).map(entry => ({
+    template: characters.find(c => c.id === entry.cardId),
+    rareza: entry.rareza,
+  })).filter(x => x.template);
+  if (jugadorTemplates.length === 0) {
+    // sin colección jugable (vacía, o sus cartas ya no existen en data/characters.json)
     jugadorTemplates = characters.slice(0, 10).map(t => ({ template: t, rareza: t.rareza }));
-    setupArea.innerHTML = `No tienes cartas en tu colección (ve al Mercado a abrir un cofre). Por ahora se arma un mazo de prueba con todos los personajes creados.`;
+    setupArea.innerHTML = `No tienes cartas jugables en tu colección (ve al Mercado a abrir un cofre). Por ahora se arma un mazo de prueba con todos los personajes creados.`;
   }
   const rivalTemplates = characters.slice(0, 10).map(t => ({ template: t, rareza: t.rareza }));
 
@@ -117,7 +115,7 @@ async function init() {
   };
 
   document.getElementById('fieldLayout').style.display = 'grid';
-  setupArea.style.display = 'none';
+  setupArea.style.display = setupArea.innerHTML.trim() ? 'block' : 'none';
   document.getElementById('controls').innerHTML = `<button class="btn" onclick="startRound()">Comenzar Partida</button>`;
   renderAll();
 }
@@ -300,10 +298,10 @@ function turnoDe(personaje) {
     return;
   }
 
-  const ab = personaje.ataqueBasico;
+  const ab = personaje.movimientos[0] || { tipoDano: 'fisico', porcentaje: 100 };
   const extraMod = NexoEffects.modificadorDanoRecibidoPct(objetivo, ab.tipoDano, null);
   const cantidad = NexoDamage.calcularYAplicarDano(personaje, objetivo, ab.tipoDano, ab.porcentaje, null, log, extraMod);
-  log(`${personaje.nombre} ataca a ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${ab.tipoDano}.`);
+  log(`${personaje.nombre} usa ${ab.nombre || 'Ataque Básico'} sobre ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${ab.tipoDano}.`);
   checkPassives(personaje, 'al_golpear', { objetivo });
   checkPassives(objetivo, 'al_recibir_dano', { objetivo: personaje });
   checkMuerte(objetivo);
@@ -421,8 +419,8 @@ function showSidePanel(instanceId) {
         <tr><td>Velocidad</td><td>${c.stats.velocidad}</td></tr>
       </tbody>
     </table>
-    <h4>Ataque Básico</h4>
-    <div class="notice">${c.ataqueBasico.porcentaje}% Daño ${c.ataqueBasico.tipoDano}</div>
+    <h4>Movimientos</h4>
+    ${(c.movimientos || []).map(m => `<div class="notice"><strong>${m.nombre || '(sin nombre)'}</strong> — ${m.rol} — ${m.porcentaje}% Daño ${m.tipoDano} — Objetivo: ${m.objetivo} — Cargas: -${m.costoCargas} / +${m.cargasGeneradas}</div>`).join('') || '<div class="notice">Sin movimientos definidos</div>'}
     <h4>Pasivas activas (${c.pasivas.length})</h4>
     ${c.pasivas.map((p, i) => `<div class="notice">${i + 1}. ${p.modo === 'pasivo' ? `+${p.valor} ${p.stat}` : `${p.gatillo} → ${p.accion.tipo}`}</div>`).join('') || '<div class="notice">Ninguna</div>'}
     <h4>Efectos activos</h4>

@@ -23,6 +23,18 @@ const NexoStatOptions = [
   { id: 'armadura', nombre: 'Armadura' },
 ];
 
+const NexoMoveTargetOptions = [
+  { id: 'st', nombre: 'ST (un enemigo objetivo)' },
+  { id: 'aoe', nombre: 'AOE (todos los enemigos)' },
+  { id: 'mt', nombre: 'MT (varios enemigos)' },
+  { id: 'self', nombre: 'SELF (a sí mismo)' },
+  { id: 'aliado_1', nombre: '1 Aliado Objetivo' },
+  { id: 'aliado_2', nombre: '2 Aliados Objetivo' },
+  { id: 'todos_aliados', nombre: 'Todos los Aliados' },
+  { id: 'aliado_aleatorio_1', nombre: '1 Aliado Aleatorio' },
+  { id: 'aliado_aleatorio_2', nombre: '2 Aliados Aleatorios' },
+];
+
 const NexoTargetOptions = [
   { id: 'portador', nombre: 'El propio personaje' },
   { id: 'objetivo', nombre: 'El objetivo del ataque' },
@@ -166,6 +178,63 @@ async function renderEffectSlots(container, { count = 5, unlockCounts, initial =
       }
     }
   }
+}
+
+// Todo personaje tiene exactamente 4 movimientos, en este orden fijo:
+// 1 Básico, 2 y 3 Especiales, 4 Ultimate.
+const NexoMoveRoles = [
+  { rol: 'basico', etiqueta: 'Movimiento 1 — Básico', costoDefault: 0 },
+  { rol: 'especial', etiqueta: 'Movimiento 2 — Especial', costoDefault: 3 },
+  { rol: 'especial', etiqueta: 'Movimiento 3 — Especial', costoDefault: 3 },
+  { rol: 'ultimate', etiqueta: 'Movimiento 4 — Ultimate', costoDefault: 6 },
+];
+
+function renderMovimientoSlots(container, initial = []) {
+  container.innerHTML = '';
+  NexoMoveRoles.forEach((info, i) => {
+    const data = initial[i];
+    const slot = document.createElement('div');
+    slot.className = 'block-box';
+    slot.dataset.movIndex = i;
+    slot.innerHTML = `
+      <h4>${info.etiqueta}</h4>
+      <div class="row">
+        <div class="field"><label>Nombre</label><input class="mv-nombre" value="${data?.nombre || ''}" /></div>
+        <div class="field"><label>Tipo de Objetivo</label>
+          <select class="mv-objetivo">${NexoMoveTargetOptions.map(o => `<option value="${o.id}">${o.nombre}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Costo de Cargas</label><input type="number" class="mv-costo" value="${data?.costoCargas ?? info.costoDefault}" /></div>
+        <div class="field"><label>Cargas Generadas al usarlo</label><input type="number" class="mv-genera" value="${data?.cargasGeneradas ?? 0}" /></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Tipo de Daño</label>
+          <select class="mv-tipo">
+            <option value="fisico">Físico</option>
+            <option value="elemental">Elemental</option>
+            <option value="especial">Especial</option>
+          </select>
+        </div>
+        <div class="field"><label>% del stat de daño</label><input type="number" class="mv-pct" value="${data?.porcentaje ?? 100}" /></div>
+      </div>
+    `;
+    if (data?.objetivo) slot.querySelector('.mv-objetivo').value = data.objetivo;
+    if (data?.tipoDano) slot.querySelector('.mv-tipo').value = data.tipoDano;
+    container.appendChild(slot);
+  });
+}
+
+function serializeMovimientoSlots(container) {
+  return Array.from(container.querySelectorAll('[data-mov-index]')).map((slot, i) => ({
+    rol: NexoMoveRoles[i].rol,
+    nombre: slot.querySelector('.mv-nombre').value,
+    objetivo: slot.querySelector('.mv-objetivo').value,
+    costoCargas: Number(slot.querySelector('.mv-costo').value) || 0,
+    cargasGeneradas: Number(slot.querySelector('.mv-genera').value) || 0,
+    tipoDano: slot.querySelector('.mv-tipo').value,
+    porcentaje: Number(slot.querySelector('.mv-pct').value) || 0,
+  }));
 }
 
 function serializeEffectSlots(container) {
