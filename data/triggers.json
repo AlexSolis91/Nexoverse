@@ -7,5 +7,6 @@
   { "id": "al_morir", "nombre": "Al morir" },
   { "id": "al_final_de_ronda", "nombre": "Al final de la ronda" },
   { "id": "al_ejecutar_ataque_basico", "nombre": "Al ejecutar un ataque básico" },
-  { "id": "al_aliado_morir", "nombre": "Cuando un aliado muere" }
+  { "id": "al_aliado_morir", "nombre": "Cuando un aliado muere" },
+  { "id": "al_acertar_critico", "nombre": "Al acertar un golpe crítico" }
 ]

@@ -49,12 +49,14 @@
     { "id": "celeridad", "nombre": "Celeridad", "stat": "velocidad", "modo": "incrementa" },
     { "id": "frenesi", "nombre": "Frenesí", "stat": "critico", "modo": "incrementa" },
     { "id": "furia", "nombre": "Furia", "stat": "danoFisico", "modo": "incrementa" },
-    { "id": "piel_de_piedra", "nombre": "Piel de Piedra", "stat": "defensa", "modo": "incrementa" }
+    { "id": "piel_de_piedra", "nombre": "Piel de Piedra", "stat": "defensa", "modo": "incrementa" },
+    { "id": "potenciacion", "nombre": "Potenciación", "stat": "danoElemental", "modo": "incrementa" }
   ],
   "debuffs": [
     { "id": "fatiga", "nombre": "Fatiga", "stat": "velocidad", "modo": "reduce" },
     { "id": "contencion", "nombre": "Contención", "stat": "critico", "modo": "reduce" },
     { "id": "intimidacion", "nombre": "Intimidación", "stat": "danoFisico", "modo": "reduce" },
-    { "id": "decrepitud", "nombre": "Decrepitud", "stat": "defensa", "modo": "reduce" }
+    { "id": "decrepitud", "nombre": "Decrepitud", "stat": "defensa", "modo": "reduce" },
+    { "id": "merma", "nombre": "Merma", "stat": "danoElemental", "modo": "reduce" }
   ]
 }

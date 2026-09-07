@@ -1,1 +1,143 @@
-[]
+[
+  {
+    "id": "madara_uchiha",
+    "nombre": "Madara Uchiha",
+    "rareza": "comun",
+    "imagenUrl": "https://i.ibb.co/JR0h6whk/Whats-App-Image-2026-06-02-at-4-50-41-PM.jpg",
+    "estadisticasBase": {
+      "hp": 9,
+      "regeneracion": 5,
+      "danoFisico": 8,
+      "danoElemental": 7,
+      "danoEspecial": 9,
+      "defensa": 1,
+      "velocidad": 8,
+      "sabiduria": 1,
+      "roboDeVida": 0.15,
+      "esquivar": 0.55,
+      "armadura": 0,
+      "critico": 0,
+      "bloqueo": 0,
+      "resHielo": 0,
+      "resVeneno": 0,
+      "resFuego": 0,
+      "resRayo": 0,
+      "resEspecial": 0
+    },
+    "pasivas": [
+      {
+        "modo": "pasivo",
+        "stat": "critico",
+        "valor": 10
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_recibir_dano",
+        "condicion": "siempre",
+        "objetivo": "portador",
+        "accion": { "tipo": "escalarStat", "stat": "regeneracion", "pct": 10 }
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_acertar_critico",
+        "condicion": "siempre",
+        "objetivo": "objetivo",
+        "accion": { "tipo": "disipar", "categoria": "buffs" }
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_acertar_critico",
+        "condicion": "siempre",
+        "objetivo": "portador",
+        "accion": { "tipo": "turnoAdicional" }
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_acertar_critico",
+        "condicion": "siempre",
+        "objetivo": "enemigoAleatorio",
+        "accion": {
+          "tipo": "dano",
+          "tipoDano": "especial",
+          "pct": 150,
+          "siElimina": [
+            { "tipo": "curar", "pct": 150, "objetivo": "portador" },
+            { "tipo": "disipar", "categoria": "efectosYdebuffs", "objetivo": "portador" }
+          ]
+        }
+      }
+    ],
+    "movimientos": [
+      {
+        "rol": "basico",
+        "nombre": "Katon: Ryūen Hōka",
+        "objetivo": "st",
+        "costoCargas": 0,
+        "cargasGeneradas": 2,
+        "tipoDano": "elemental",
+        "subtipo": "fuego",
+        "porcentaje": 85,
+        "efectos": [
+          {
+            "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "objetivo",
+            "accion": { "tipo": "efectoEstado", "id": "quemadura", "pct": 20 }
+          },
+          {
+            "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "todosAliados",
+            "accion": { "tipo": "buff", "id": "potenciacion", "pct": 10 }
+          }
+        ]
+      },
+      {
+        "rol": "especial",
+        "nombre": "Susanoo",
+        "objetivo": "st",
+        "costoCargas": 4,
+        "cargasGeneradas": 0,
+        "tipoDano": "especial",
+        "porcentaje": 140,
+        "efectos": [
+          {
+            "modo": "tce", "gatillo": "al_acertar_critico", "condicion": "siempre", "objetivo": "todosEnemigos",
+            "accion": { "tipo": "dano", "tipoDano": "especial", "pct": 25 }
+          },
+          {
+            "modo": "tce", "gatillo": "al_acertar_critico", "condicion": "siempre", "objetivo": "objetivo",
+            "accion": { "tipo": "robarCargas" }
+          }
+        ]
+      },
+      {
+        "rol": "especial",
+        "nombre": "Gudōdama",
+        "objetivo": "mt",
+        "costoCargas": 9,
+        "cargasGeneradas": 0,
+        "tipoDano": "especial",
+        "porcentaje": 60,
+        "golpes": { "min": 1, "max": 5 },
+        "efectos": [
+          {
+            "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "objetivo",
+            "accion": { "tipo": "efectoEstado", "id": "debilidad", "pct": 10, "duracion": 2 }
+          },
+          {
+            "modo": "tce", "gatillo": "al_acertar_critico", "condicion": "siempre", "objetivo": "portador",
+            "accion": { "tipo": "cargas", "pct": 4 }
+          }
+        ]
+      },
+      {
+        "rol": "ultimate",
+        "nombre": "Chibaku Tensei",
+        "objetivo": "aoe",
+        "costoCargas": 15,
+        "cargasGeneradas": 0,
+        "tipoDano": "fisico",
+        "porcentaje": 200,
+        "escalaPorSobreviviente": 20,
+        "efectos": []
+      }
+    ]
+  }
+]

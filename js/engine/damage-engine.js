@@ -3,6 +3,7 @@
 // daño_final = daño_base * (1 - resistenciaCorrespondiente / 100)
 // Defensa funciona como una resistencia, pero solo para Físico.
 // Armadura no es %: es una barra que se agota antes de tocar el HP real.
+// Crítico: probabilidad = stat Crítico del atacante (%), daño crítico = x2 fijo para todos.
 
 const NexoDamage = (() => {
   function statDeDano(personaje, tipoDano) {
@@ -40,15 +41,22 @@ const NexoDamage = (() => {
     return cantidad;
   }
 
+  const MULTIPLICADOR_CRITICO = 2;
+
   function calcularYAplicarDano(atacante, objetivo, tipoDano, pct, subtipo, log, extraModPct = 0) {
     const base = statDeDano(atacante, tipoDano) * (pct / 100);
     const resistencia = resistenciaCorrespondiente(objetivo, tipoDano, subtipo);
     let final = base * (1 - resistencia / 100);
     if (extraModPct) final = final * (1 + extraModPct / 100);
+
+    const probCritico = (atacante.stats.critico || 0) / 100;
+    const esCritico = Math.random() < probCritico;
+    if (esCritico) final = final * MULTIPLICADOR_CRITICO;
+
     final = Math.max(0, final);
     aplicarDano(objetivo, final, log);
-    return final;
+    return { cantidad: final, esCritico };
   }
 
-  return { statDeDano, resistenciaCorrespondiente, aplicarDano, calcularYAplicarDano };
+  return { statDeDano, resistenciaCorrespondiente, aplicarDano, calcularYAplicarDano, MULTIPLICADOR_CRITICO };
 })();

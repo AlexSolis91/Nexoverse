@@ -4,37 +4,21 @@
 // Condición de victoria: el primero en quedarse sin personajes en el campo pierde (se revisa
 // solo al final de la Fase de Batalla).
 //
-// SIMPLIFICACIONES DE ESTA PRIMERA VERSIÓN (pendientes de que el diseño las defina):
-// - No hay selección manual de movimiento ni de objetivo: cada personaje ejecuta su Ataque
-//   Básico sobre un enemigo vivo aleatorio (no se usan Cargas ni Movimientos todavía).
+// SIMPLIFICACIONES DE ESTA VERSIÓN (pendientes de que el diseño las defina):
+// - No hay selección manual de movimiento ni de objetivo: cada personaje ejecuta su Movimiento 1
+//   (Básico) sobre un enemigo vivo aleatorio. Los movimientos Especial/Ultimate (con costo de
+//   Cargas) existen en los datos del personaje pero no son seleccionables todavía.
 // - No hay equipo equipado (los slots de equipo no están conectados aún a esta batalla).
-// - Como los talentos empiezan en 0 y el sistema de nivel/subida aún no está diseñado,
-//   se usa una base temporal de estadísticas (TEMP_BASE_STATS + TEMP_TALENT_POINTS) solo
-//   para que el combate sea jugable; debe reemplazarse cuando definan el sistema de niveles.
+// - Cada personaje usa sus estadísticas base tal cual (nivel 1, 0 puntos de talento asignados,
+//   confirmado por el usuario) — el sistema de subir de nivel/asignar talentos aún no tiene UI.
+// - Cargas: se acumulan sin tope (todavía no se definió un máximo).
 
 const FIELD_SIZE = 5;
 
-const TEMP_BASE_STATS = {
-  danoFisico: 10, danoElemental: 10, danoEspecial: 10, defensa: 5, sabiduria: 5,
-  roboDeVida: 5, hp: 100, regeneracion: 5, velocidad: 10, esquivar: 5,
-  critico: 5, bloqueo: 5, resHielo: 0, resVeneno: 0, resFuego: 0, resRayo: 0, resEspecial: 0, armadura: 0,
-};
-const TEMP_TALENT_POINTS = 5; // puntos "de ejemplo" repartidos igual en los 5 talentos
-
 let state = null;
 
-function buildStatsFromTemplate(talentsCfg) {
-  const stats = { ...TEMP_BASE_STATS };
-  talentsCfg.talentos.forEach(t => {
-    const map = talentsCfg.mapeo[t];
-    stats[map.primaria] = (stats[map.primaria] || 0) + TEMP_TALENT_POINTS * talentsCfg.puntosPorTalento.primaria;
-    stats[map.secundaria] = (stats[map.secundaria] || 0) + TEMP_TALENT_POINTS * talentsCfg.puntosPorTalento.secundaria;
-  });
-  return stats;
-}
-
-function makeBattleCharacter(template, rareza, lado, talentsCfg, unlockCounts) {
-  const stats = buildStatsFromTemplate(talentsCfg);
+function makeBattleCharacter(template, rareza, lado, unlockCounts) {
+  const stats = { ...(template.estadisticasBase || {}) };
   const desbloqueadas = unlockCounts[rareza] || 1;
   const pasivasActivas = (template.pasivas || []).slice(0, desbloqueadas);
   // los bonos pasivos de estadística ("siempre activos") de las pasivas ya desbloqueadas
@@ -57,7 +41,11 @@ function makeBattleCharacter(template, rareza, lado, talentsCfg, unlockCounts) {
     armaduraActual: stats.armadura,
     efectos: [],
     vivo: true,
-    movimientos: template.movimientos || [],
+    cargasActuales: 0,
+    // clon profundo de movimientos: cada personaje en batalla lleva su propia copia porque
+    // movimientos como Chibaku Tensei acumulan un bono de daño persistente (bonoAcumulado)
+    // propio de esa instancia, no del template compartido.
+    movimientos: (template.movimientos || []).map(m => ({ ...m, bonoAcumulado: 0 })),
     pasivas: pasivasActivas,
   };
 }
@@ -77,13 +65,13 @@ function log(msg) {
 }
 
 async function init() {
-  const [characters, talentsCfg, rarities] = await Promise.all([
-    NexoData.characters(), NexoData.talents(), NexoData.rarities()
+  const [characters, rarities] = await Promise.all([
+    NexoData.characters(), NexoData.rarities()
   ]);
 
   const setupArea = document.getElementById('setupArea');
   if (characters.length === 0) {
-    setupArea.innerHTML = `No hay personajes creados todavía. Ve al <a href="admin/login.html">Panel de Creador</a> y crea al menos uno para poder jugar una batalla de prueba.`;
+    setupArea.innerHTML = `No hay personajes creados todavía en data/characters.json.`;
     return;
   }
 
@@ -102,14 +90,14 @@ async function init() {
   state = {
     ronda: 1,
     fase: 'inicio',
-    talentsCfg, rarities,
+    rarities,
     log: [],
     jugador: {
-      mazo: shuffle(jugadorTemplates.map(x => makeBattleCharacter(x.template, x.rareza, 'jugador', talentsCfg, rarities.efectosDesbloqueados))),
+      mazo: shuffle(jugadorTemplates.map(x => makeBattleCharacter(x.template, x.rareza, 'jugador', rarities.efectosDesbloqueados))),
       mano: [], campo: new Array(FIELD_SIZE).fill(null), cementerio: [],
     },
     rival: {
-      mazo: shuffle(rivalTemplates.map(x => makeBattleCharacter(x.template, x.rareza, 'rival', talentsCfg, rarities.efectosDesbloqueados))),
+      mazo: shuffle(rivalTemplates.map(x => makeBattleCharacter(x.template, x.rareza, 'rival', rarities.efectosDesbloqueados))),
       mano: [], campo: new Array(FIELD_SIZE).fill(null), cementerio: [],
     },
   };
@@ -169,10 +157,21 @@ function goToBattlePhase() {
   state.fase = 'batalla';
   log(`— Fase de Batalla —`);
   const vivos = [...state.jugador.campo, ...state.rival.campo].filter(Boolean);
-  state.ordenDeTurno = vivos.sort((a, b) => b.stats.velocidad - a.stats.velocidad);
-  state.turnoIndex = 0;
+  // cola MUTABLE (no un arreglo fijo): así "gana 1 turno adicional" puede insertar a alguien
+  // justo después de la acción actual, sin recalcular todo el orden de la ronda.
+  state.colaDeTurnos = vivos.sort((a, b) => b.stats.velocidad - a.stats.velocidad);
   document.getElementById('controls').innerHTML = `<button class="btn" onclick="playAutoBattle()">Simular Batalla</button>`;
   renderAll();
+}
+
+// Inserta a `personaje` para que actúe inmediatamente después del turno en curso — usado por
+// la acción universal "turnoAdicional" (ver ejecutarAccion). Si ya está en la cola, no se
+// duplica: simplemente se re-agenda al frente.
+function otorgarTurnoAdicional(personaje) {
+  if (!personaje || !personaje.vivo || !state.colaDeTurnos) return;
+  state.colaDeTurnos = state.colaDeTurnos.filter(p => p !== personaje);
+  state.colaDeTurnos.unshift(personaje);
+  log(`${personaje.nombre} gana un turno adicional.`);
 }
 
 function livingEnemies(personaje) {
@@ -209,37 +208,77 @@ function resolverObjetivos(objetivoTipo, personaje, contexto) {
   }
   if (objetivoTipo === 'todosAliados') return state[personaje.lado].campo.filter(c => c && c.vivo);
   if (objetivoTipo === 'todosEnemigos') return livingEnemies(personaje);
+  if (objetivoTipo === 'enemigoAleatorio') {
+    const enemigos = livingEnemies(personaje);
+    return enemigos.length ? [enemigos[Math.floor(Math.random() * enemigos.length)]] : [];
+  }
   return [];
 }
 
+// Las 10 acciones universales del motor. Cualquier pasiva/movimiento/equipo de CUALQUIER
+// personaje se construye combinando estas — nunca se crea una acción exclusiva de un personaje.
 function ejecutarAccion(accion, personaje, contexto, objetivoTipo) {
   const objetivos = resolverObjetivos(objetivoTipo, personaje, contexto);
   objetivos.forEach(obj => {
     if (accion.tipo === 'dano') {
       const extraMod = NexoEffects.modificadorDanoRecibidoPct(obj, accion.tipoDano, accion.subtipo);
-      const cantidad = NexoDamage.calcularYAplicarDano(personaje, obj, accion.tipoDano, accion.pct, accion.subtipo, log, extraMod);
+      const { cantidad } = NexoDamage.calcularYAplicarDano(personaje, obj, accion.tipoDano, accion.pct, accion.subtipo, log, extraMod);
       log(`${personaje.nombre} inflige ${cantidad.toFixed(1)} de daño ${accion.tipoDano} a ${obj.nombre} (pasiva/efecto).`);
-      checkMuerte(obj);
+      const eliminado = checkMuerte(obj);
+      if (eliminado && accion.siElimina) {
+        accion.siElimina.forEach(sub => ejecutarAccion(sub, personaje, { objetivo: obj }, sub.objetivo));
+      }
     } else if (accion.tipo === 'efectoEstado') {
-      aplicarEfectoEstadoPorId(accion.id, obj, personaje, accion.pct);
+      aplicarEfectoEstadoPorId(accion.id, obj, personaje, accion.pct, accion.duracion);
       log(`${personaje.nombre} aplica ${accion.id} a ${obj.nombre}.`);
     } else if (accion.tipo === 'buff') {
-      NexoEffects.aplicarBuffODebuff(obj, accion.id, accion.pct, 2);
+      NexoEffects.aplicarBuffODebuff(obj, accion.id, accion.pct, accion.duracion || 2);
       log(`${obj.nombre} recibe el buff ${accion.id}.`);
     } else if (accion.tipo === 'debuff') {
-      NexoEffects.aplicarBuffODebuff(obj, accion.id, accion.pct, 2);
+      NexoEffects.aplicarBuffODebuff(obj, accion.id, accion.pct, accion.duracion || 2);
       log(`${obj.nombre} recibe el debuff ${accion.id}.`);
     } else if (accion.tipo === 'curar') {
       const cura = obj.hpMaximo * (accion.pct / 100);
       obj.hpActual = Math.min(obj.hpMaximo, obj.hpActual + cura);
       log(`${obj.nombre} se cura ${cura.toFixed(1)} HP.`);
     } else if (accion.tipo === 'cargas') {
-      log(`${obj.nombre} genera ${accion.pct} Cargas.`);
+      obj.cargasActuales = (obj.cargasActuales || 0) + accion.pct;
+      log(`${obj.nombre} genera ${accion.pct} Cargas (total: ${obj.cargasActuales}).`);
+    } else if (accion.tipo === 'robarCargas') {
+      const robadas = obj.cargasActuales || 0;
+      obj.cargasActuales = 0;
+      personaje.cargasActuales = (personaje.cargasActuales || 0) + robadas;
+      log(`${personaje.nombre} roba ${robadas} Cargas de ${obj.nombre}.`);
+    } else if (accion.tipo === 'disipar') {
+      const categorias = disiparCategoriasA(accion.categoria);
+      obj.efectos = (obj.efectos || []).filter(e => !categorias.includes(categoriaDeEfecto(e.id)));
+      log(`${personaje.nombre} disipa (${accion.categoria || 'todos'}) de ${obj.nombre}.`);
+    } else if (accion.tipo === 'escalarStat') {
+      obj.stats[accion.stat] = (obj.stats[accion.stat] || 0) * (1 + accion.pct / 100);
+      log(`${obj.nombre} incrementa ${accion.stat} en ${accion.pct}% (ahora ${obj.stats[accion.stat].toFixed(2)}).`);
+    } else if (accion.tipo === 'turnoAdicional') {
+      otorgarTurnoAdicional(obj);
     }
   });
 }
 
-function aplicarEfectoEstadoPorId(id, objetivo, aplicador, pct) {
+// A qué categoría pertenece cada id de efecto/buff/debuff, para que "disipar" sepa qué barrer.
+const BUFF_IDS = ['celeridad', 'frenesi', 'furia', 'piel_de_piedra', 'potenciacion'];
+const DEBUFF_IDS = ['fatiga', 'contencion', 'intimidacion', 'decrepitud', 'merma'];
+function categoriaDeEfecto(id) {
+  if (BUFF_IDS.includes(id)) return 'buffs';
+  if (DEBUFF_IDS.includes(id)) return 'debuffs';
+  return 'efectosDeEstado';
+}
+function disiparCategoriasA(categoria) {
+  if (categoria === 'buffs') return ['buffs'];
+  if (categoria === 'debuffs') return ['debuffs'];
+  if (categoria === 'efectosDeEstado') return ['efectosDeEstado'];
+  if (categoria === 'efectosYdebuffs') return ['efectosDeEstado', 'debuffs'];
+  return ['buffs', 'debuffs', 'efectosDeEstado']; // "todos" o sin especificar
+}
+
+function aplicarEfectoEstadoPorId(id, objetivo, aplicador, pct, duracion) {
   if (id === 'quemadura') NexoEffects.aplicarQuemadura(objetivo, aplicador.stats.danoElemental, pct, aplicador.instanceId);
   else if (id === 'veneno') NexoEffects.aplicarVeneno(objetivo, aplicador.stats.danoElemental, pct, aplicador.instanceId);
   else if (id === 'sangrado') NexoEffects.aplicarSangrado(objetivo, pct, aplicador.instanceId);
@@ -251,8 +290,8 @@ function aplicarEfectoEstadoPorId(id, objetivo, aplicador, pct) {
   else if (id === 'posesion') NexoEffects.aplicarControlDeTurno(objetivo, 'posesion', 1);
   else if (id === 'mega_posesion') NexoEffects.aplicarControlDeTurno(objetivo, 'mega_posesion', 2);
   else if (id === 'confusion') NexoEffects.aplicarControlDeTurno(objetivo, 'confusion', 1);
-  else if (id === 'ceguera') NexoEffects.aplicarCeguera(objetivo, 1);
-  else if (id === 'debilidad') NexoEffects.aplicarDebilidad(objetivo, pct, 3);
+  else if (id === 'ceguera') NexoEffects.aplicarCeguera(objetivo, duracion || 1);
+  else if (id === 'debilidad') NexoEffects.aplicarDebilidad(objetivo, pct, duracion || 3);
 }
 
 function checkMuerte(personaje) {
@@ -263,7 +302,10 @@ function checkMuerte(personaje) {
     const idx = p.campo.indexOf(personaje);
     if (idx >= 0) p.campo[idx] = null;
     p.cementerio.push(personaje);
+    if (state.colaDeTurnos) state.colaDeTurnos = state.colaDeTurnos.filter(x => x !== personaje);
+    return true;
   }
+  return false;
 }
 
 function turnoDe(personaje) {
@@ -303,11 +345,18 @@ function turnoDe(personaje) {
   }
 
   const ab = personaje.movimientos[0] || { tipoDano: 'fisico', porcentaje: 100 };
-  const extraMod = NexoEffects.modificadorDanoRecibidoPct(objetivo, ab.tipoDano, null);
-  const cantidad = NexoDamage.calcularYAplicarDano(personaje, objetivo, ab.tipoDano, ab.porcentaje, null, log, extraMod);
-  log(`${personaje.nombre} usa ${ab.nombre || 'Ataque Básico'} sobre ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${ab.tipoDano}.`);
+  const extraMod = NexoEffects.modificadorDanoRecibidoPct(objetivo, ab.tipoDano, ab.subtipo);
+  const { cantidad, esCritico } = NexoDamage.calcularYAplicarDano(personaje, objetivo, ab.tipoDano, ab.porcentaje, ab.subtipo, log, extraMod);
+  log(`${personaje.nombre} usa ${ab.nombre || 'Ataque Básico'} sobre ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${ab.tipoDano}${esCritico ? ' (¡CRÍTICO!)' : ''}.`);
+  if (ab.cargasGeneradas) {
+    personaje.cargasActuales = (personaje.cargasActuales || 0) + ab.cargasGeneradas;
+  }
   checkPassives(personaje, 'al_golpear', { objetivo });
   checkEffectsList(ab.efectos, personaje, 'al_golpear', { objetivo });
+  if (esCritico) {
+    checkPassives(personaje, 'al_acertar_critico', { objetivo });
+    checkEffectsList(ab.efectos, personaje, 'al_acertar_critico', { objetivo });
+  }
   checkPassives(objetivo, 'al_recibir_dano', { objetivo: personaje });
   checkMuerte(objetivo);
 }
@@ -318,8 +367,11 @@ function sideHasNoCharacters(lado) {
 
 async function playAutoBattle() {
   document.getElementById('controls').innerHTML = '';
-  for (const personaje of state.ordenDeTurno) {
+  // cola dinámica: turnoDe/ejecutarAccion pueden insertar turnos extra al frente (ver
+  // otorgarTurnoAdicional), por eso se consume con shift() en vez de iterar un arreglo fijo.
+  while (state.colaDeTurnos.length > 0) {
     if (sideHasNoCharacters('jugador') || sideHasNoCharacters('rival')) break;
+    const personaje = state.colaDeTurnos.shift();
     turnoDe(personaje);
     renderAll();
     await new Promise(r => setTimeout(r, 550));
@@ -422,6 +474,9 @@ function showSidePanel(instanceId) {
         <tr><td>Daño Especial</td><td>${c.stats.danoEspecial}</td></tr>
         <tr><td>Defensa</td><td>${c.stats.defensa}</td></tr>
         <tr><td>Velocidad</td><td>${c.stats.velocidad}</td></tr>
+        <tr><td>Crítico</td><td>${c.stats.critico}%</td></tr>
+        <tr><td>Regeneración</td><td>${c.stats.regeneracion.toFixed ? c.stats.regeneracion.toFixed(2) : c.stats.regeneracion}</td></tr>
+        <tr><td>Cargas</td><td>${c.cargasActuales || 0}</td></tr>
       </tbody>
     </table>
     <h4>Movimientos</h4>
