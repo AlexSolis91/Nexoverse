@@ -497,9 +497,9 @@ function cardArt(c, size) {
 function renderHand(lado, oculto = false) {
   const el = document.getElementById(lado + 'Hand');
   el.innerHTML = state[lado].mano.map((c, idx) => `
-    <div class="card ${c.rareza}" style="width:70px;cursor:pointer;" onclick="${lado === 'jugador' && state.fase === 'invocacion' ? `summon('jugador', ${idx})` : ''}">
-      <div class="art" style="height:60px;font-size:22px;">${oculto ? '🎴' : cardArt(c)}</div>
-      ${oculto ? '' : `<div class="info"><div class="name" style="font-size:10px;">${c.nombre}</div></div>`}
+    <div class="card ${c.rareza}" style="width:130px;cursor:pointer;" onclick="${lado === 'jugador' && state.fase === 'invocacion' ? `summon('jugador', ${idx})` : ''}">
+      <div class="art" style="height:107px;font-size:32px;">${oculto ? '🎴' : cardArt(c)}</div>
+      ${oculto ? '' : `<div class="info"><div class="name" style="font-size:11px;">${c.nombre}</div></div>`}
     </div>`).join('');
 }
 
