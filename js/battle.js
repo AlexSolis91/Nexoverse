@@ -11,9 +11,14 @@
 // - No hay equipo equipado (los slots de equipo no están conectados aún a esta batalla).
 // - Cada personaje usa sus estadísticas base tal cual (nivel 1, 0 puntos de talento asignados,
 //   confirmado por el usuario) — el sistema de subir de nivel/asignar talentos aún no tiene UI.
-// - Cargas: se acumulan sin tope (todavía no se definió un máximo).
+// - Cargas: tope de 20 por personaje, confirmado por el diseño (ver CARGA_MAXIMA).
+// - Nivel/XP: el sistema de progresión (ganar XP en partida, asignar talentos) está diseñado
+//   pero aún no implementado — nivel/xpActual/xpParaSubir aquí son solo para que la barra de
+//   XP de la carta tenga algo que mostrar; todo personaje en batalla se trata como Nivel 1.
 
 const FIELD_SIZE = 5;
+const CARGA_MAXIMA = 20;
+function xpParaSubir(nivel) { return Math.round(100 * Math.pow(nivel, 1.5)); }
 
 let state = null;
 
@@ -42,6 +47,10 @@ function makeBattleCharacter(template, rareza, lado, unlockCounts) {
     efectos: [],
     vivo: true,
     cargasActuales: 0,
+    armaduraMaxima: stats.armadura,
+    nivel: 1,
+    xpActual: 0,
+    xpParaSubir: xpParaSubir(1),
     // clon profundo de movimientos: cada personaje en batalla lleva su propia copia porque
     // movimientos como Chibaku Tensei acumulan un bono de daño persistente (bonoAcumulado)
     // propio de esa instancia, no del template compartido.
@@ -277,12 +286,12 @@ function ejecutarAccion(accion, personaje, contexto, objetivoTipo) {
         log(`${obj.nombre} se cura ${cura.toFixed(1)} HP.`);
       }
     } else if (accion.tipo === 'cargas') {
-      obj.cargasActuales = (obj.cargasActuales || 0) + accion.pct;
-      log(`${obj.nombre} genera ${accion.pct} Cargas (total: ${obj.cargasActuales}).`);
+      obj.cargasActuales = Math.min(CARGA_MAXIMA, (obj.cargasActuales || 0) + accion.pct);
+      log(`${obj.nombre} genera ${accion.pct} Cargas (total: ${obj.cargasActuales}/${CARGA_MAXIMA}).`);
     } else if (accion.tipo === 'robarCargas') {
       const robadas = obj.cargasActuales || 0;
       obj.cargasActuales = 0;
-      personaje.cargasActuales = (personaje.cargasActuales || 0) + robadas;
+      personaje.cargasActuales = Math.min(CARGA_MAXIMA, (personaje.cargasActuales || 0) + robadas);
       log(`${personaje.nombre} roba ${robadas} Cargas de ${obj.nombre}.`);
     } else if (accion.tipo === 'disipar') {
       const categorias = disiparCategoriasA(accion.categoria);
@@ -403,7 +412,7 @@ function ejecutarMovimientoBasico(personaje, objetivo, contextoExtra) {
   const { cantidad, esCritico } = NexoDamage.calcularYAplicarDano(personaje, objetivo, ab.tipoDano, ab.porcentaje, ab.subtipo, log, extraMod);
   log(`${personaje.nombre} usa ${ab.nombre || 'Ataque Básico'} sobre ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${ab.tipoDano}${esCritico ? ' (¡CRÍTICO!)' : ''}.`);
   if (ab.cargasGeneradas) {
-    personaje.cargasActuales = (personaje.cargasActuales || 0) + ab.cargasGeneradas;
+    personaje.cargasActuales = Math.min(CARGA_MAXIMA, (personaje.cargasActuales || 0) + ab.cargasGeneradas);
   }
   checkPassives(personaje, 'al_golpear', { objetivo });
   checkEffectsList(ab.efectos, personaje, 'al_golpear', { objetivo });
@@ -494,19 +503,55 @@ function renderHand(lado, oculto = false) {
     </div>`).join('');
 }
 
+// Color de la barra de HP según qué tan peligrosa es la situación del personaje.
+function colorDeHp(pct) {
+  if (pct >= 60) return 'var(--ok)';
+  if (pct >= 25) return '#f5a524'; // naranja
+  return 'var(--danger)';
+}
+
+// Etiqueta corta para mostrar como "badge" de un efecto/buff/debuff activo en la carta.
+const NOMBRE_CORTO_EFECTO = {
+  quemadura: 'Quemadura', veneno: 'Veneno', sangrado: 'Sangrado', aturdimiento: 'Aturdido',
+  mega_aturdimiento: 'M.Aturdido', congelacion: 'Congelado', mega_congelacion: 'M.Congelado',
+  miedo: 'Miedo', posesion: 'Poseído', mega_posesion: 'M.Poseído', confusion: 'Confundido',
+  ceguera: 'Ceguera', debilidad: 'Débil', quemadura_solar: 'Q.Solar',
+  celeridad: 'Celeridad', frenesi: 'Frenesí', furia: 'Furia', piel_de_piedra: 'Piel Piedra',
+  potenciacion: 'Potenciado', provocacion: 'Provocando',
+  fatiga: 'Fatiga', contencion: 'Contención', intimidacion: 'Intimidado', decrepitud: 'Decrépito',
+  merma: 'Merma',
+};
+
+function renderBadgesEfectos(c) {
+  return (c.efectos || []).map(e => {
+    const cat = categoriaDeEfecto(e.id);
+    const clase = cat === 'buffs' ? 'badge-buff' : cat === 'debuffs' ? 'badge-debuff' : 'badge-estado';
+    return `<span class="status-badge ${clase}">${NOMBRE_CORTO_EFECTO[e.id] || e.id}</span>`;
+  }).join('');
+}
+
 function renderField(lado) {
   const el = document.getElementById(lado + 'Field');
   el.innerHTML = state[lado].campo.map(c => {
     if (!c) return `<div class="field-slot">·</div>`;
-    const pct = Math.max(0, c.hpActual / c.hpMaximo * 100);
-    return `<div class="field-slot filled card ${c.rareza}" style="height:130px;flex-direction:column;font-size:11px;"
-              onmouseenter="showSidePanel('${c.instanceId}')">
-              <div style="width:36px;height:36px;overflow:hidden;border-radius:6px;">${cardArt(c, 26)}</div>
-              <div>${c.nombre}</div>
-              <div style="width:90%;height:6px;background:#333;border-radius:4px;overflow:hidden;margin-top:4px;">
-                <div style="width:${pct}%;height:100%;background:${pct > 30 ? 'var(--ok)' : 'var(--danger)'};"></div>
+    const pctHp = Math.max(0, c.hpActual / c.hpMaximo * 100);
+    const pctArmadura = c.armaduraMaxima > 0 ? Math.max(0, Math.min(100, c.armaduraActual / c.hpMaximo * 100)) : 0;
+    const pctCargas = Math.max(0, Math.min(100, (c.cargasActuales || 0) / CARGA_MAXIMA * 100));
+    const pctXp = Math.max(0, Math.min(100, (c.xpActual || 0) / (c.xpParaSubir || 1) * 100));
+    return `<div class="field-slot filled card ${c.rareza}" onmouseenter="showSidePanel('${c.instanceId}')">
+              <div class="fc-img">${cardArt(c, 30)}</div>
+              <div class="fc-name">${c.nombre} <span class="fc-nivel">Nv.${c.nivel || 1}</span></div>
+              <div class="fc-bar fc-bar-hp" title="HP: ${Math.ceil(c.hpActual)}/${c.hpMaximo} · Armadura: ${Math.ceil(c.armaduraActual)}">
+                <div class="fc-bar-fill" style="width:${pctHp}%;background:${colorDeHp(pctHp)};"></div>
+                <div class="fc-bar-fill fc-armadura" style="width:${pctArmadura}%;"></div>
               </div>
-              <div>${Math.ceil(c.hpActual)}/${c.hpMaximo}</div>
+              <div class="fc-bar fc-bar-cargas" title="Cargas: ${c.cargasActuales || 0}/${CARGA_MAXIMA}">
+                <div class="fc-bar-fill" style="width:${pctCargas}%;background:#fff;"></div>
+              </div>
+              <div class="fc-bar fc-bar-xp" title="XP: ${c.xpActual || 0}/${c.xpParaSubir}">
+                <div class="fc-bar-fill" style="width:${pctXp}%;background:#ffd21a;"></div>
+              </div>
+              <div class="fc-badges">${renderBadgesEfectos(c)}</div>
             </div>`;
   }).join('');
 }
@@ -519,10 +564,11 @@ function showSidePanel(instanceId) {
   panel.innerHTML = `
     <div style="width:100%;height:140px;border-radius:8px;overflow:hidden;margin-bottom:10px;background:linear-gradient(160deg,#2a3260,#10142a);display:flex;align-items:center;justify-content:center;">${cardArt(c, 60)}</div>
     <h3>${c.nombre}</h3>
-    <div class="notice">Rareza: ${c.rareza}</div>
+    <div class="notice">Rareza: ${c.rareza} · Nivel ${c.nivel || 1}</div>
     <table class="card-table">
       <tbody>
         <tr><td>HP</td><td>${Math.ceil(c.hpActual)} / ${c.hpMaximo}</td></tr>
+        <tr><td>Armadura</td><td>${Math.ceil(c.armaduraActual)} / ${c.armaduraMaxima}</td></tr>
         <tr><td>Daño Físico</td><td>${c.stats.danoFisico}</td></tr>
         <tr><td>Daño Elemental</td><td>${c.stats.danoElemental}</td></tr>
         <tr><td>Daño Especial</td><td>${c.stats.danoEspecial}</td></tr>
@@ -530,7 +576,8 @@ function showSidePanel(instanceId) {
         <tr><td>Velocidad</td><td>${c.stats.velocidad}</td></tr>
         <tr><td>Crítico</td><td>${c.stats.critico}%</td></tr>
         <tr><td>Regeneración</td><td>${c.stats.regeneracion.toFixed ? c.stats.regeneracion.toFixed(2) : c.stats.regeneracion}</td></tr>
-        <tr><td>Cargas</td><td>${c.cargasActuales || 0}</td></tr>
+        <tr><td>Cargas</td><td>${c.cargasActuales || 0} / ${CARGA_MAXIMA}</td></tr>
+        <tr><td>XP</td><td>${c.xpActual || 0} / ${c.xpParaSubir}</td></tr>
       </tbody>
     </table>
     <h4>Movimientos</h4>
