@@ -46,6 +46,13 @@ const NexoEffects = (() => {
     objetivo.efectos.push({ id: 'ceguera', turnosRestantes: duracionTurnos || 1 });
   }
 
+  // No expira por turnos (indefinido_hasta_limpieza) — se retira solo con disipar/limpiar.
+  function aplicarQuemaduraSolar(objetivo) {
+    ensureBucket(objetivo);
+    if (objetivo.efectos.some(e => e.id === 'quemadura_solar')) return; // no acumulable
+    objetivo.efectos.push({ id: 'quemadura_solar' });
+  }
+
   function aplicarBuffODebuff(objetivo, id, pct, duracionTurnos) {
     ensureBucket(objetivo);
     objetivo.efectos.push({ id, pct, turnosRestantes: duracionTurnos || 1 });
@@ -149,7 +156,7 @@ const NexoEffects = (() => {
 
   return {
     aplicarQuemadura, aplicarVeneno, aplicarSangrado, aplicarControlDeTurno,
-    aplicarDebilidad, aplicarCeguera, aplicarBuffODebuff,
+    aplicarDebilidad, aplicarCeguera, aplicarQuemaduraSolar, aplicarBuffODebuff,
     procesarInicioDeTurno, procesarFinalDeRonda, modificadorDanoRecibidoPct,
     tieneEfecto, limpiarEfecto, bloqueaGeneracionDeCargas,
   };

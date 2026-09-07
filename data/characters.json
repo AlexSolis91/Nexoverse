@@ -139,5 +139,140 @@
         "efectos": []
       }
     ]
+  },
+  {
+    "id": "superman",
+    "nombre": "Superman",
+    "rareza": "comun",
+    "imagenUrl": "https://i.ibb.co/fY9JmMXj/Super-Man-AI.jpg",
+    "estadisticasBase": {
+      "hp": 10,
+      "regeneracion": 6,
+      "danoFisico": 9,
+      "danoElemental": 5,
+      "danoEspecial": 4,
+      "defensa": 3,
+      "velocidad": 9,
+      "sabiduria": 1,
+      "roboDeVida": 0.15,
+      "esquivar": 0.55,
+      "armadura": 0,
+      "critico": 0,
+      "bloqueo": 0,
+      "resHielo": 0,
+      "resVeneno": 0,
+      "resFuego": 0,
+      "resRayo": 0,
+      "resEspecial": 0
+    },
+    "pasivas": [
+      {
+        "modo": "tce",
+        "gatillo": "al_ser_invocado",
+        "condicion": "siempre",
+        "objetivo": "portador",
+        "accion": { "tipo": "buff", "id": "provocacion", "pct": 0, "duracion": 999 }
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_recibir_dano",
+        "condicion": "dano_recibido_es_tipo",
+        "condicionParam": { "tipoDano": "fisico" },
+        "objetivo": "objetivo",
+        "accion": { "tipo": "contraataque" }
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_inicio_de_turno",
+        "condicion": "siempre",
+        "objetivo": "portador",
+        "accion": { "tipo": "escalarStat", "stat": "defensa", "pct": 10 }
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_enemigo_usar_ultimate",
+        "condicion": "siempre",
+        "objetivo": "enemigoAleatorio2",
+        "accion": { "tipo": "efectoEstado", "id": "congelacion" },
+        "_pendiente": "al_enemigo_usar_ultimate todavía no se dispara: los movimientos Ultimate no se ejecutan aún en batalla."
+      },
+      {
+        "modo": "tce",
+        "gatillo": "al_golpear",
+        "condicion": "objetivo_tiene_efecto_o_debuff",
+        "objetivo": "objetivo",
+        "accion": { "tipo": "dano", "tipoDano": "fisico", "pct": 80, "baseDeCalculo": "hpMaximoObjetivo" }
+      }
+    ],
+    "movimientos": [
+      {
+        "rol": "basico",
+        "nombre": "Puño de Acero",
+        "objetivo": "st",
+        "costoCargas": 0,
+        "cargasGeneradas": 2,
+        "tipoDano": "fisico",
+        "porcentaje": 90,
+        "efectos": [
+          {
+            "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "probabilidad": 50, "objetivo": "objetivo",
+            "accion": { "tipo": "efectoEstado", "id": "aturdimiento" }
+          }
+        ]
+      },
+      {
+        "rol": "especial",
+        "nombre": "Visión Térmica",
+        "objetivo": "st",
+        "costoCargas": 5,
+        "cargasGeneradas": 0,
+        "tipoDano": "elemental",
+        "subtipo": "fuego",
+        "porcentaje": 130,
+        "bonoSiYaTeniaEfecto": { "efectoId": "quemadura_solar", "multiplicador": 3, "_pendiente": "requiere resolver movimientos Especiales en batalla" },
+        "efectos": [
+          {
+            "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "objetivo",
+            "accion": { "tipo": "efectoEstado", "id": "quemadura_solar" }
+          }
+        ]
+      },
+      {
+        "rol": "especial",
+        "nombre": "Aliento Gélido",
+        "objetivo": "aoe",
+        "costoCargas": 7,
+        "cargasGeneradas": 0,
+        "tipoDano": "elemental",
+        "subtipo": "hielo",
+        "porcentaje": 50,
+        "comboSiYaCongelado": {
+          "descripcion": "Si el enemigo golpeado ya tenía congelación antes de este ataque: aplica mega_congelacion en su lugar, y además causa 120% de Daño Físico a todos los enemigos con congelacion o mega_congelacion activa.",
+          "_pendiente": "requiere objetivo filtrado por efecto activo y resolver movimientos Especiales en batalla"
+        },
+        "efectos": [
+          {
+            "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "probabilidad": 50, "objetivo": "objetivo",
+            "accion": { "tipo": "efectoEstado", "id": "congelacion" }
+          }
+        ]
+      },
+      {
+        "rol": "ultimate",
+        "nombre": "Prime One Million",
+        "objetivo": "self",
+        "costoCargas": 12,
+        "cargasGeneradas": 0,
+        "tipoDano": null,
+        "porcentaje": null,
+        "efectos": [
+          { "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "portador", "accion": { "tipo": "escalarStat", "stat": "hp", "pct": 50 } },
+          { "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "portador", "accion": { "tipo": "curar", "pct": 150 } },
+          { "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "portador", "accion": { "tipo": "escalarStat", "stat": "danoFisico", "pct": 150 } },
+          { "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "portador", "accion": { "tipo": "escalarStat", "stat": "danoElemental", "pct": 150 } },
+          { "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "objetivo": "portador", "accion": { "tipo": "escalarStat", "stat": "danoEspecial", "pct": 150 } }
+        ]
+      }
+    ]
   }
 ]

@@ -43,14 +43,20 @@
       "duracion": { "modo": "variable", "descripcion": "definida por la fuente que la aplica" } },
     { "id": "debilidad", "nombre": "Debilidad", "tipo": "danoRecibido",
       "pctPorInstancia": 10, "acumulable": true,
-      "duracion": { "modo": "variable", "descripcion": "definida por la fuente que la aplica" } }
+      "duracion": { "modo": "variable", "descripcion": "definida por la fuente que la aplica" } },
+    { "id": "quemadura_solar", "nombre": "Quemadura Solar", "tipo": "redireccionDeCuracion",
+      "descripcion": "Mientras está activa, cualquier curación que el portador fuera a recibir se convierte en esa misma cantidad de Daño Elemental de Fuego en su lugar.",
+      "duracion": { "modo": "indefinido_hasta_limpieza" },
+      "instanciasIndependientes": false, "acumulable": false }
   ],
   "buffs": [
     { "id": "celeridad", "nombre": "Celeridad", "stat": "velocidad", "modo": "incrementa" },
     { "id": "frenesi", "nombre": "Frenesí", "stat": "critico", "modo": "incrementa" },
     { "id": "furia", "nombre": "Furia", "stat": "danoFisico", "modo": "incrementa" },
     { "id": "piel_de_piedra", "nombre": "Piel de Piedra", "stat": "defensa", "modo": "incrementa" },
-    { "id": "potenciacion", "nombre": "Potenciación", "stat": "danoElemental", "modo": "incrementa" }
+    { "id": "potenciacion", "nombre": "Potenciación", "stat": "danoElemental", "modo": "incrementa" },
+    { "id": "provocacion", "nombre": "Provocación", "stat": null, "modo": "comportamiento",
+      "descripcion": "Mientras está activa, cualquier ataque enemigo de objetivo único (ST) solo puede seleccionar a un personaje con Provocación activa." }
   ],
   "debuffs": [
     { "id": "fatiga", "nombre": "Fatiga", "stat": "velocidad", "modo": "reduce" },

@@ -4,5 +4,7 @@
   { "id": "ejecutor_hp_menor_a_pct", "nombre": "El HP propio está por debajo de X%", "params": ["pct"] },
   { "id": "objetivo_hp_mayor_a_ejecutor", "nombre": "El objetivo tiene más HP que el ejecutor", "params": [] },
   { "id": "objetivo_tiene_efecto", "nombre": "El objetivo tiene el efecto X", "params": ["efectoId"] },
-  { "id": "ejecutor_tiene_efecto", "nombre": "El ejecutor tiene el efecto X", "params": ["efectoId"] }
+  { "id": "ejecutor_tiene_efecto", "nombre": "El ejecutor tiene el efecto X", "params": ["efectoId"] },
+  { "id": "objetivo_tiene_efecto_o_debuff", "nombre": "El objetivo tiene algún Efecto de Estado o Debuff activo (cualquiera)", "params": [] },
+  { "id": "dano_recibido_es_tipo", "nombre": "El daño que se acaba de recibir es de un tipo específico", "params": ["tipoDano"] }
 ]

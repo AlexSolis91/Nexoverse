@@ -148,6 +148,7 @@ function summon(lado, handIndex) {
   const slotIndex = p.campo.findIndex(s => s === null);
   p.campo[slotIndex] = card;
   p._invocadosEstaFase++;
+  checkPassives(card, 'al_ser_invocado', {});
   renderAll();
 }
 
@@ -182,7 +183,9 @@ function livingEnemies(personaje) {
 function checkEffectsList(lista, personaje, gatilloId, contexto) {
   for (const item of lista || []) {
     if (item.modo !== 'tce' || item.gatillo !== gatilloId) continue;
-    if (!evaluarCondicion(item.condicion, personaje, contexto)) continue;
+    // probabilidad opcional (0-100): si no se especifica, siempre se evalúa (100%).
+    if (item.probabilidad != null && Math.random() * 100 >= item.probabilidad) continue;
+    if (!evaluarCondicion(item.condicion, personaje, contexto, item.condicionParam)) continue;
     ejecutarAccion(item.accion, personaje, contexto, item.objetivo);
   }
 }
@@ -191,11 +194,19 @@ function checkPassives(personaje, gatilloId, contexto) {
   checkEffectsList(personaje.pasivas, personaje, gatilloId, contexto);
 }
 
-function evaluarCondicion(condId, personaje, contexto) {
+// `param` son los parámetros propios DE LA CONDICIÓN (ej. qué % o qué tipoDano espera),
+// separados de `contexto` que trae los datos DEL EVENTO que disparó el gatillo.
+function evaluarCondicion(condId, personaje, contexto, param) {
   if (!condId || condId === 'siempre') return true;
   if (condId === 'objetivo_menos_hp_que_ejecutor') return contexto.objetivo && contexto.objetivo.hpActual < personaje.hpActual;
   if (condId === 'objetivo_hp_mayor_a_ejecutor') return contexto.objetivo && contexto.objetivo.hpActual > personaje.hpActual;
-  if (condId === 'ejecutor_hp_menor_a_pct') return personaje.hpActual / personaje.hpMaximo <= (contexto.pct || 50) / 100;
+  if (condId === 'ejecutor_hp_menor_a_pct') return personaje.hpActual / personaje.hpMaximo <= ((param && param.pct) || 50) / 100;
+  if (condId === 'objetivo_tiene_efecto') return contexto.objetivo && param && NexoEffects.tieneEfecto(contexto.objetivo, param.efectoId);
+  if (condId === 'ejecutor_tiene_efecto') return param && NexoEffects.tieneEfecto(personaje, param.efectoId);
+  if (condId === 'objetivo_tiene_efecto_o_debuff') {
+    return contexto.objetivo && (contexto.objetivo.efectos || []).some(e => categoriaDeEfecto(e.id) !== 'buffs');
+  }
+  if (condId === 'dano_recibido_es_tipo') return param && contexto.tipoDano === param.tipoDano;
   return true;
 }
 
@@ -212,6 +223,9 @@ function resolverObjetivos(objetivoTipo, personaje, contexto) {
     const enemigos = livingEnemies(personaje);
     return enemigos.length ? [enemigos[Math.floor(Math.random() * enemigos.length)]] : [];
   }
+  if (objetivoTipo === 'enemigoAleatorio2') {
+    return shuffle(livingEnemies(personaje)).slice(0, 2);
+  }
   return [];
 }
 
@@ -221,13 +235,26 @@ function ejecutarAccion(accion, personaje, contexto, objetivoTipo) {
   const objetivos = resolverObjetivos(objetivoTipo, personaje, contexto);
   objetivos.forEach(obj => {
     if (accion.tipo === 'dano') {
-      const extraMod = NexoEffects.modificadorDanoRecibidoPct(obj, accion.tipoDano, accion.subtipo);
-      const { cantidad } = NexoDamage.calcularYAplicarDano(personaje, obj, accion.tipoDano, accion.pct, accion.subtipo, log, extraMod);
+      let cantidad;
+      if (accion.baseDeCalculo === 'hpMaximoObjetivo') {
+        // daño = % del HP MÁXIMO del objetivo, no del stat del atacante (ej. pasiva Legendaria de Superman)
+        cantidad = obj.hpMaximo * (accion.pct / 100);
+        NexoDamage.aplicarDano(obj, cantidad, log);
+      } else {
+        const extraMod = NexoEffects.modificadorDanoRecibidoPct(obj, accion.tipoDano, accion.subtipo);
+        ({ cantidad } = NexoDamage.calcularYAplicarDano(personaje, obj, accion.tipoDano, accion.pct, accion.subtipo, log, extraMod));
+      }
       log(`${personaje.nombre} inflige ${cantidad.toFixed(1)} de daño ${accion.tipoDano} a ${obj.nombre} (pasiva/efecto).`);
       const eliminado = checkMuerte(obj);
       if (eliminado && accion.siElimina) {
         accion.siElimina.forEach(sub => ejecutarAccion(sub, personaje, { objetivo: obj }, sub.objetivo));
       }
+    } else if (accion.tipo === 'contraataque') {
+      // "contraataca con su básico": ejecuta el MISMO movimiento básico que se usa en el turno
+      // normal, reutilizando exactamente la misma función (nunca una copia del ataque).
+      const profundidad = (contexto.profundidadContraataque || 0) + 1;
+      if (profundidad > 1) return; // evita ping-pong infinito entre dos contraatacadores mutuos
+      if (personaje.vivo && obj.vivo) ejecutarMovimientoBasico(personaje, obj, { profundidadContraataque: profundidad });
     } else if (accion.tipo === 'efectoEstado') {
       aplicarEfectoEstadoPorId(accion.id, obj, personaje, accion.pct, accion.duracion);
       log(`${personaje.nombre} aplica ${accion.id} a ${obj.nombre}.`);
@@ -239,8 +266,16 @@ function ejecutarAccion(accion, personaje, contexto, objetivoTipo) {
       log(`${obj.nombre} recibe el debuff ${accion.id}.`);
     } else if (accion.tipo === 'curar') {
       const cura = obj.hpMaximo * (accion.pct / 100);
-      obj.hpActual = Math.min(obj.hpMaximo, obj.hpActual + cura);
-      log(`${obj.nombre} se cura ${cura.toFixed(1)} HP.`);
+      if (NexoEffects.tieneEfecto(obj, 'quemadura_solar')) {
+        // Quemadura Solar: la curación que recibiría se convierte en esa misma cantidad
+        // de Daño Elemental de Fuego, en vez de curar.
+        NexoDamage.aplicarDano(obj, cura, log);
+        log(`${obj.nombre} tiene Quemadura Solar: la curación de ${cura.toFixed(1)} se convierte en daño de Fuego.`);
+        checkMuerte(obj);
+      } else {
+        obj.hpActual = Math.min(obj.hpMaximo, obj.hpActual + cura);
+        log(`${obj.nombre} se cura ${cura.toFixed(1)} HP.`);
+      }
     } else if (accion.tipo === 'cargas') {
       obj.cargasActuales = (obj.cargasActuales || 0) + accion.pct;
       log(`${obj.nombre} genera ${accion.pct} Cargas (total: ${obj.cargasActuales}).`);
@@ -255,6 +290,7 @@ function ejecutarAccion(accion, personaje, contexto, objetivoTipo) {
       log(`${personaje.nombre} disipa (${accion.categoria || 'todos'}) de ${obj.nombre}.`);
     } else if (accion.tipo === 'escalarStat') {
       obj.stats[accion.stat] = (obj.stats[accion.stat] || 0) * (1 + accion.pct / 100);
+      if (accion.stat === 'hp') obj.hpMaximo = obj.stats.hp; // el HP Máx real de combate sigue a stats.hp
       log(`${obj.nombre} incrementa ${accion.stat} en ${accion.pct}% (ahora ${obj.stats[accion.stat].toFixed(2)}).`);
     } else if (accion.tipo === 'turnoAdicional') {
       otorgarTurnoAdicional(obj);
@@ -263,7 +299,7 @@ function ejecutarAccion(accion, personaje, contexto, objetivoTipo) {
 }
 
 // A qué categoría pertenece cada id de efecto/buff/debuff, para que "disipar" sepa qué barrer.
-const BUFF_IDS = ['celeridad', 'frenesi', 'furia', 'piel_de_piedra', 'potenciacion'];
+const BUFF_IDS = ['celeridad', 'frenesi', 'furia', 'piel_de_piedra', 'potenciacion', 'provocacion'];
 const DEBUFF_IDS = ['fatiga', 'contencion', 'intimidacion', 'decrepitud', 'merma'];
 function categoriaDeEfecto(id) {
   if (BUFF_IDS.includes(id)) return 'buffs';
@@ -292,6 +328,7 @@ function aplicarEfectoEstadoPorId(id, objetivo, aplicador, pct, duracion) {
   else if (id === 'confusion') NexoEffects.aplicarControlDeTurno(objetivo, 'confusion', 1);
   else if (id === 'ceguera') NexoEffects.aplicarCeguera(objetivo, duracion || 1);
   else if (id === 'debilidad') NexoEffects.aplicarDebilidad(objetivo, pct, duracion || 3);
+  else if (id === 'quemadura_solar') NexoEffects.aplicarQuemaduraSolar(objetivo);
 }
 
 function checkMuerte(personaje) {
@@ -334,9 +371,8 @@ function turnoDe(personaje) {
     return;
   }
 
-  const enemigos = livingEnemies(personaje);
-  if (enemigos.length === 0) return;
-  objetivo = enemigos[Math.floor(Math.random() * enemigos.length)];
+  objetivo = elegirObjetivoST(personaje);
+  if (!objetivo) return;
 
   if (NexoEffects.tieneEfecto(personaje, 'ceguera') && Math.random() < 0.5) {
     log(`${personaje.nombre} falla su ataque (Ceguera).`);
@@ -344,6 +380,24 @@ function turnoDe(personaje) {
     return;
   }
 
+  ejecutarMovimientoBasico(personaje, objetivo);
+}
+
+// Elige el objetivo para un ataque ST (objetivo único): si algún enemigo tiene el buff
+// Provocación activo, SOLO puede elegirse entre esos (regla universal, no exclusiva de
+// ningún personaje — cualquiera puede tener Provocación, por pasiva o por buff recibido).
+function elegirObjetivoST(personaje) {
+  const enemigos = livingEnemies(personaje);
+  if (enemigos.length === 0) return null;
+  const provocando = enemigos.filter(e => NexoEffects.tieneEfecto(e, 'provocacion'));
+  const pool = provocando.length ? provocando : enemigos;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// El Movimiento 1 (Básico) de un personaje, en una única función reutilizable: la usa el
+// turno normal Y cualquier "contraataque" (acción universal 'contraataque') — nunca hay
+// una segunda copia de "cómo se ejecuta un básico".
+function ejecutarMovimientoBasico(personaje, objetivo, contextoExtra) {
   const ab = personaje.movimientos[0] || { tipoDano: 'fisico', porcentaje: 100 };
   const extraMod = NexoEffects.modificadorDanoRecibidoPct(objetivo, ab.tipoDano, ab.subtipo);
   const { cantidad, esCritico } = NexoDamage.calcularYAplicarDano(personaje, objetivo, ab.tipoDano, ab.porcentaje, ab.subtipo, log, extraMod);
@@ -357,7 +411,7 @@ function turnoDe(personaje) {
     checkPassives(personaje, 'al_acertar_critico', { objetivo });
     checkEffectsList(ab.efectos, personaje, 'al_acertar_critico', { objetivo });
   }
-  checkPassives(objetivo, 'al_recibir_dano', { objetivo: personaje });
+  checkPassives(objetivo, 'al_recibir_dano', { objetivo: personaje, tipoDano: ab.tipoDano, ...contextoExtra });
   checkMuerte(objetivo);
 }
 
