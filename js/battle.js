@@ -20,6 +20,20 @@ const FIELD_SIZE = 5;
 const CARGA_MAXIMA = 20;
 function xpParaSubir(nivel) { return Math.round(100 * Math.pow(nivel, 1.5)); }
 
+const OBJETIVO_LABEL = {
+  st: 'ST (un enemigo)', aoe: 'AOE (todos los enemigos)', mt: 'MT (varios enemigos)', self: 'A sí mismo',
+  aliado_1: '1 Aliado', aliado_2: '2 Aliados', todos_aliados: 'Todos los aliados',
+  aliado_aleatorio_1: '1 Aliado aleatorio', aliado_aleatorio_2: '2 Aliados aleatorios',
+};
+const TIPO_DANO_LABEL = { fisico: 'Físico', elemental: 'Elemental', especial: 'Especial' };
+const SUBTIPO_LABEL = { hielo: 'Hielo', veneno: 'Veneno', fuego: 'Fuego', rayo: 'Rayo' };
+const ROL_LABEL = { basico: 'Básico', especial: 'Especial', ultimate: 'Ultimate' };
+// Objetivos que requieren que ALGUIEN (jugador o IA) elija manualmente a quién apunta el
+// movimiento; el resto (aoe/mt/self/todos_aliados/aliado_aleatorio_*) se resuelve solo.
+function necesitaSeleccionDeObjetivo(mov) {
+  return ['st', 'aliado_1', 'aliado_2'].includes(mov.objetivo);
+}
+
 let state = null;
 
 function makeBattleCharacter(template, rareza, lado, unlockCounts) {
@@ -170,7 +184,7 @@ function goToBattlePhase() {
   // cola MUTABLE (no un arreglo fijo): así "gana 1 turno adicional" puede insertar a alguien
   // justo después de la acción actual, sin recalcular todo el orden de la ronda.
   state.colaDeTurnos = vivos.sort((a, b) => b.stats.velocidad - a.stats.velocidad);
-  document.getElementById('controls').innerHTML = `<button class="btn" onclick="playAutoBattle()">Simular Batalla</button>`;
+  document.getElementById('controls').innerHTML = `<button class="btn" onclick="playAutoBattle()">Iniciar Batalla</button>`;
   renderAll();
 }
 
@@ -354,7 +368,15 @@ function checkMuerte(personaje) {
   return false;
 }
 
-function turnoDe(personaje) {
+// Si algún enemigo tiene el buff Provocación activo, cualquier atacante (jugador o IA) SOLO
+// puede elegir entre esos como objetivo ST — regla universal, no exclusiva de nadie.
+function poolObjetivosST(personaje) {
+  const enemigos = livingEnemies(personaje);
+  const provocando = enemigos.filter(e => NexoEffects.tieneEfecto(e, 'provocacion'));
+  return provocando.length ? provocando : enemigos;
+}
+
+async function turnoDe(personaje) {
   if (!personaje.vivo) return;
   const { pierdeTurno, redireccionAliado, autoGolpe } = NexoEffects.procesarInicioDeTurno(personaje, log);
   checkPassives(personaje, 'al_inicio_de_turno', {});
@@ -368,11 +390,10 @@ function turnoDe(personaje) {
   }
   if (pierdeTurno) return;
 
-  let objetivo;
   if (redireccionAliado) {
     const aliados = state[personaje.lado].campo.filter(c => c && c.vivo && c !== personaje);
     if (aliados.length === 0) return;
-    objetivo = aliados[Math.floor(Math.random() * aliados.length)];
+    const objetivo = aliados[Math.floor(Math.random() * aliados.length)];
     const cantidad = personaje.stats.danoFisico * (redireccionAliado.pct / 100);
     NexoDamage.aplicarDano(objetivo, cantidad, log);
     log(`${personaje.nombre} (Poseído) ataca a su aliado ${objetivo.nombre} por ${cantidad.toFixed(1)}.`);
@@ -380,48 +401,190 @@ function turnoDe(personaje) {
     return;
   }
 
-  objetivo = elegirObjetivoST(personaje);
-  if (!objetivo) return;
+  if (personaje.lado === 'rival') {
+    decidirYEjecutarIA(personaje);
+  } else {
+    await esperarAccionDelJugador(personaje);
+  }
+}
 
+// --- IA: siempre intenta el movimiento más caro en Cargas que pueda pagar; apunta al
+// enemigo más débil (menor % de HP), y en caso de empate al que tenga más Cargas. ---
+function elegirMovimientoIA(personaje) {
+  let elegido = 0, mejorCosto = -1;
+  personaje.movimientos.forEach((m, i) => {
+    if ((personaje.cargasActuales || 0) >= m.costoCargas && m.costoCargas > mejorCosto) {
+      elegido = i; mejorCosto = m.costoCargas;
+    }
+  });
+  return elegido;
+}
+
+function elegirMasDebil(candidatos) {
+  if (!candidatos.length) return null;
+  return [...candidatos].sort((a, b) => {
+    const pctA = a.hpActual / a.hpMaximo, pctB = b.hpActual / b.hpMaximo;
+    if (pctA !== pctB) return pctA - pctB;
+    return (b.cargasActuales || 0) - (a.cargasActuales || 0);
+  })[0];
+}
+
+function elegirObjetivoIA(personaje, mov) {
+  if (mov.objetivo === 'st') return elegirMasDebil(poolObjetivosST(personaje));
+  if (mov.objetivo === 'aliado_1') return elegirMasDebil(state[personaje.lado].campo.filter(c => c && c.vivo));
+  if (mov.objetivo === 'aliado_2') {
+    return [...state[personaje.lado].campo.filter(c => c && c.vivo)]
+      .sort((a, b) => (a.hpActual / a.hpMaximo) - (b.hpActual / b.hpMaximo))
+      .slice(0, 2);
+  }
+  return null;
+}
+
+function decidirYEjecutarIA(personaje) {
+  const movIndex = elegirMovimientoIA(personaje);
+  const mov = personaje.movimientos[movIndex];
+  const objetivoManual = necesitaSeleccionDeObjetivo(mov) ? elegirObjetivoIA(personaje, mov) : null;
+  if (necesitaSeleccionDeObjetivo(mov) && !objetivoManual) return; // sin objetivo válido disponible
+  ejecutarMovimiento(personaje, movIndex, objetivoManual);
+}
+
+// --- Jugador: pausa el ciclo de turnos hasta que haga clic en su carta y elija movimiento
+// (y objetivo, si aplica) a través de los paneles. ---
+function esperarAccionDelJugador(personaje) {
+  return new Promise(resolve => {
+    state.turnoJugadorPendiente = { personaje, resolve };
+    renderAll();
+  });
+}
+
+function resolverTurnoDelJugador() {
+  const pendiente = state.turnoJugadorPendiente;
+  state.turnoJugadorPendiente = null;
+  cerrarPaneles();
+  renderAll();
+  if (pendiente) pendiente.resolve();
+}
+
+// Aplica el daño + gatillos de UN movimiento sobre UN objetivo. `pctOverride` permite a
+// mecánicas especiales (bono acumulado, daño condicional) sustituir el % base del movimiento.
+function golpearUnObjetivo(personaje, mov, objetivo, pctOverride, opts) {
+  if (!objetivo || !objetivo.vivo || !mov.tipoDano) return null;
+  const pct = pctOverride != null ? pctOverride : mov.porcentaje;
+  const extraMod = NexoEffects.modificadorDanoRecibidoPct(objetivo, mov.tipoDano, mov.subtipo);
+  const { cantidad, esCritico } = NexoDamage.calcularYAplicarDano(personaje, objetivo, mov.tipoDano, pct, mov.subtipo, log, extraMod);
+  log(`${personaje.nombre} usa ${mov.nombre} sobre ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${mov.tipoDano}${esCritico ? ' (¡CRÍTICO!)' : ''}.`);
+  checkPassives(personaje, 'al_golpear', { objetivo });
+  if (!(opts && opts.saltarEfectos)) checkEffectsList(mov.efectos, personaje, 'al_golpear', { objetivo });
+  if (esCritico) {
+    checkPassives(personaje, 'al_acertar_critico', { objetivo });
+    if (!(opts && opts.saltarEfectos)) checkEffectsList(mov.efectos, personaje, 'al_acertar_critico', { objetivo });
+  }
+  checkPassives(objetivo, 'al_recibir_dano', { objetivo: personaje, tipoDano: mov.tipoDano, ...(opts && opts.contextoExtra) });
+  checkMuerte(objetivo);
+  return { cantidad, esCritico };
+}
+
+function resolverObjetivosDeMovimiento(personaje, mov, objetivoManual) {
+  const tipo = mov.objetivo;
+  if (tipo === 'st' || tipo === 'aliado_1') return objetivoManual ? [objetivoManual] : [];
+  if (tipo === 'aliado_2') return Array.isArray(objetivoManual) ? objetivoManual : (objetivoManual ? [objetivoManual] : []);
+  if (tipo === 'self') return [personaje];
+  if (tipo === 'aoe' || tipo === 'mt') return livingEnemies(personaje);
+  if (tipo === 'todos_aliados') return state[personaje.lado].campo.filter(c => c && c.vivo);
+  if (tipo === 'aliado_aleatorio_1') {
+    const a = state[personaje.lado].campo.filter(c => c && c.vivo && c !== personaje);
+    return a.length ? [a[Math.floor(Math.random() * a.length)]] : [];
+  }
+  if (tipo === 'aliado_aleatorio_2') {
+    return shuffle(state[personaje.lado].campo.filter(c => c && c.vivo && c !== personaje)).slice(0, 2);
+  }
+  return [];
+}
+
+// Movimiento 1 (Básico) — sigue siendo el que usan los contraataques, vía la misma función
+// general de ejecución (nunca una copia aparte de "cómo se ejecuta un ataque").
+function ejecutarMovimientoBasico(personaje, objetivo, contextoExtra) {
+  ejecutarMovimiento(personaje, 0, objetivo, contextoExtra);
+}
+
+// Ejecuta cualquiera de los 4 movimientos de un personaje: cobra Cargas, resuelve objetivo(s)
+// y aplica daño/efectos — incluyendo las 3 mecánicas especiales ya diseñadas (bono acumulado
+// de Chibaku Tensei, daño condicional de Visión Térmica, combo de congelación de Aliento Gélido).
+function ejecutarMovimiento(personaje, movIndex, objetivoManual, contextoExtra) {
+  const mov = personaje.movimientos[movIndex];
+  if (!mov || !personaje.vivo) return;
+  if ((personaje.cargasActuales || 0) < mov.costoCargas) {
+    log(`${personaje.nombre} no tiene Cargas suficientes para usar ${mov.nombre}.`);
+    return;
+  }
+  personaje.cargasActuales -= mov.costoCargas;
+
+  // Ceguera: probabilidad de fallar CUALQUIER movimiento (no solo el básico), se consume al usarlo.
   if (NexoEffects.tieneEfecto(personaje, 'ceguera') && Math.random() < 0.5) {
-    log(`${personaje.nombre} falla su ataque (Ceguera).`);
+    log(`${personaje.nombre} falla su ataque con ${mov.nombre} (Ceguera).`);
     NexoEffects.limpiarEfecto(personaje, 'ceguera');
+    if (mov.cargasGeneradas) personaje.cargasActuales = Math.min(CARGA_MAXIMA, personaje.cargasActuales + mov.cargasGeneradas);
     return;
   }
 
-  ejecutarMovimientoBasico(personaje, objetivo);
-}
+  const objetivos = resolverObjetivosDeMovimiento(personaje, mov, objetivoManual);
 
-// Elige el objetivo para un ataque ST (objetivo único): si algún enemigo tiene el buff
-// Provocación activo, SOLO puede elegirse entre esos (regla universal, no exclusiva de
-// ningún personaje — cualquiera puede tener Provocación, por pasiva o por buff recibido).
-function elegirObjetivoST(personaje) {
-  const enemigos = livingEnemies(personaje);
-  if (enemigos.length === 0) return null;
-  const provocando = enemigos.filter(e => NexoEffects.tieneEfecto(e, 'provocacion'));
-  const pool = provocando.length ? provocando : enemigos;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
+  if (mov.golpes && mov.objetivo === 'mt') {
+    // Gudōdama: golpea de min a max veces, cada golpe elige un enemigo vivo al azar.
+    const n = mov.golpes.min + Math.floor(Math.random() * (mov.golpes.max - mov.golpes.min + 1));
+    for (let i = 0; i < n; i++) {
+      const enemigos = livingEnemies(personaje);
+      if (enemigos.length === 0) break;
+      golpearUnObjetivo(personaje, mov, enemigos[Math.floor(Math.random() * enemigos.length)], null, { contextoExtra });
+    }
+  } else if (mov.comboSiYaCongelado) {
+    // Aliento Gélido: si un objetivo ya estaba Congelado, sube a Mega Congelación (sin roll) y
+    // marca el combo; el combo dispara un golpe extra de 120% Físico a todos los Congelados/Mega.
+    let algunoYaCongelado = false;
+    objetivos.forEach(t => {
+      if (!t.vivo) return;
+      golpearUnObjetivo(personaje, mov, t, null, { saltarEfectos: true, contextoExtra });
+      if (!t.vivo) return;
+      const yaCongelado = NexoEffects.tieneEfecto(t, 'congelacion') || NexoEffects.tieneEfecto(t, 'mega_congelacion');
+      if (yaCongelado) { aplicarEfectoEstadoPorId('mega_congelacion', t, personaje); algunoYaCongelado = true; }
+      else if (Math.random() * 100 < 50) { aplicarEfectoEstadoPorId('congelacion', t, personaje); }
+    });
+    if (algunoYaCongelado) {
+      const congelados = livingEnemies(personaje).filter(e => NexoEffects.tieneEfecto(e, 'congelacion') || NexoEffects.tieneEfecto(e, 'mega_congelacion'));
+      congelados.forEach(e => {
+        const extraMod = NexoEffects.modificadorDanoRecibidoPct(e, 'fisico', null);
+        const { cantidad } = NexoDamage.calcularYAplicarDano(personaje, e, 'fisico', 120, null, log, extraMod);
+        log(`${personaje.nombre} inflige ${cantidad.toFixed(1)} de daño físico a ${e.nombre} (combo de Congelación).`);
+        checkMuerte(e);
+      });
+    }
+  } else if (mov.bonoSiYaTeniaEfecto) {
+    // Visión Térmica: daño triple si el objetivo ya tenía el efecto antes de este golpe.
+    objetivos.forEach(t => {
+      const yaLoTenia = NexoEffects.tieneEfecto(t, mov.bonoSiYaTeniaEfecto.efectoId);
+      const pctFinal = mov.porcentaje * (yaLoTenia ? mov.bonoSiYaTeniaEfecto.multiplicador : 1);
+      golpearUnObjetivo(personaje, mov, t, pctFinal, { contextoExtra });
+    });
+  } else if (mov.escalaPorSobreviviente != null) {
+    // Chibaku Tensei: usa el bono acumulado de esta instancia, luego lo incrementa según
+    // cuántos enemigos sobrevivieron a ESTA ejecución.
+    const pctFinal = mov.porcentaje + (mov.bonoAcumulado || 0);
+    objetivos.forEach(t => golpearUnObjetivo(personaje, mov, t, pctFinal, { contextoExtra }));
+    const sobrevivientes = objetivos.filter(t => t.vivo).length;
+    if (sobrevivientes > 0) {
+      mov.bonoAcumulado = (mov.bonoAcumulado || 0) + sobrevivientes * mov.escalaPorSobreviviente;
+      log(`${mov.nombre} acumula +${sobrevivientes * mov.escalaPorSobreviviente}% de daño para la próxima vez.`);
+    }
+  } else if (mov.tipoDano) {
+    objetivos.forEach(t => golpearUnObjetivo(personaje, mov, t, null, { contextoExtra }));
+  } else {
+    // Movimientos sin daño (ej. auto-buff como Prime One Million): igual disparan sus efectos.
+    objetivos.forEach(t => checkEffectsList(mov.efectos, personaje, 'al_golpear', { objetivo: t }));
+  }
 
-// El Movimiento 1 (Básico) de un personaje, en una única función reutilizable: la usa el
-// turno normal Y cualquier "contraataque" (acción universal 'contraataque') — nunca hay
-// una segunda copia de "cómo se ejecuta un básico".
-function ejecutarMovimientoBasico(personaje, objetivo, contextoExtra) {
-  const ab = personaje.movimientos[0] || { tipoDano: 'fisico', porcentaje: 100 };
-  const extraMod = NexoEffects.modificadorDanoRecibidoPct(objetivo, ab.tipoDano, ab.subtipo);
-  const { cantidad, esCritico } = NexoDamage.calcularYAplicarDano(personaje, objetivo, ab.tipoDano, ab.porcentaje, ab.subtipo, log, extraMod);
-  log(`${personaje.nombre} usa ${ab.nombre || 'Ataque Básico'} sobre ${objetivo.nombre} por ${cantidad.toFixed(1)} de daño ${ab.tipoDano}${esCritico ? ' (¡CRÍTICO!)' : ''}.`);
-  if (ab.cargasGeneradas) {
-    personaje.cargasActuales = Math.min(CARGA_MAXIMA, (personaje.cargasActuales || 0) + ab.cargasGeneradas);
+  if (mov.cargasGeneradas) {
+    personaje.cargasActuales = Math.min(CARGA_MAXIMA, (personaje.cargasActuales || 0) + mov.cargasGeneradas);
   }
-  checkPassives(personaje, 'al_golpear', { objetivo });
-  checkEffectsList(ab.efectos, personaje, 'al_golpear', { objetivo });
-  if (esCritico) {
-    checkPassives(personaje, 'al_acertar_critico', { objetivo });
-    checkEffectsList(ab.efectos, personaje, 'al_acertar_critico', { objetivo });
-  }
-  checkPassives(objetivo, 'al_recibir_dano', { objetivo: personaje, tipoDano: ab.tipoDano, ...contextoExtra });
-  checkMuerte(objetivo);
 }
 
 function sideHasNoCharacters(lado) {
@@ -435,9 +598,12 @@ async function playAutoBattle() {
   while (state.colaDeTurnos.length > 0) {
     if (sideHasNoCharacters('jugador') || sideHasNoCharacters('rival')) break;
     const personaje = state.colaDeTurnos.shift();
-    turnoDe(personaje);
+    state.personajeEnTurno = personaje;
     renderAll();
-    await new Promise(r => setTimeout(r, 550));
+    await turnoDe(personaje); // se pausa aquí mismo si es un personaje del jugador
+    state.personajeEnTurno = null;
+    renderAll();
+    await new Promise(r => setTimeout(r, 450));
   }
 
   if (sideHasNoCharacters('jugador') || sideHasNoCharacters('rival')) {
@@ -471,6 +637,8 @@ async function playAutoBattle() {
 // --- Render ---
 function renderAll() {
   document.getElementById('turnIndicator').textContent =
+    state.turnoJugadorPendiente ? `Tu turno: haz clic en ${state.turnoJugadorPendiente.personaje.nombre} para elegir tu movimiento` :
+    state.personajeEnTurno ? `Turno de ${state.personajeEnTurno.nombre}` :
     state.fase === 'batalla' ? `Ronda ${state.ronda} — Fase de Batalla` :
     state.fase === 'invocacion' ? `Ronda ${state.ronda} — Fase de Invocación` :
     `Ronda ${state.ronda}`;
@@ -538,7 +706,11 @@ function renderField(lado) {
     const pctArmadura = c.armaduraMaxima > 0 ? Math.max(0, Math.min(100, c.armaduraActual / c.hpMaximo * 100)) : 0;
     const pctCargas = Math.max(0, Math.min(100, (c.cargasActuales || 0) / CARGA_MAXIMA * 100));
     const pctXp = Math.max(0, Math.min(100, (c.xpActual || 0) / (c.xpParaSubir || 1) * 100));
-    return `<div class="field-slot filled card ${c.rareza}" onmouseenter="showSidePanel('${c.instanceId}')">
+    const esTurnoActual = state.personajeEnTurno === c;
+    const puedeAbrirPanel = state.turnoJugadorPendiente && state.turnoJugadorPendiente.personaje === c;
+    return `<div class="field-slot filled card ${c.rareza}${esTurnoActual ? ' turno-actual' : ''}"
+              onmouseenter="showSidePanel('${c.instanceId}')"
+              ${puedeAbrirPanel ? `onclick="abrirPanelDeAccion('${c.instanceId}')"` : ''}>
               <div class="fc-img">${cardArt(c, 30)}</div>
               <div class="fc-name">${c.nombre} <span class="fc-nivel">Nv.${c.nivel || 1}</span></div>
               <div class="fc-bar fc-bar-hp" title="HP: ${Math.ceil(c.hpActual)}/${c.hpMaximo} · Armadura: ${Math.ceil(c.armaduraActual)}">
@@ -554,6 +726,115 @@ function renderField(lado) {
               <div class="fc-badges">${renderBadgesEfectos(c)}</div>
             </div>`;
   }).join('');
+}
+
+// --- Panel de Acción (elegir Movimiento) y Panel de Objetivo ---
+function cerrarPaneles() {
+  const overlay = document.getElementById('actionOverlay');
+  overlay.style.display = 'none';
+  overlay.innerHTML = '';
+}
+
+function abrirPanelDeAccion(instanceId) {
+  if (!state.turnoJugadorPendiente || state.turnoJugadorPendiente.personaje.instanceId !== instanceId) return;
+  const personaje = state.turnoJugadorPendiente.personaje;
+  const overlay = document.getElementById('actionOverlay');
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div class="action-panel">
+      <h3>${personaje.nombre} — elige un movimiento</h3>
+      ${personaje.movimientos.map((m, i) => {
+        const bloqueado = (personaje.cargasActuales || 0) < m.costoCargas;
+        const elemento = m.subtipo ? ` de ${SUBTIPO_LABEL[m.subtipo] || m.subtipo}` : '';
+        const dano = m.tipoDano ? `${m.porcentaje}% Daño ${TIPO_DANO_LABEL[m.tipoDano] || m.tipoDano}${elemento}` : 'Sin daño directo';
+        return `
+        <div class="move-card ${bloqueado ? 'bloqueado' : ''}" ${bloqueado ? '' : `onclick="elegirMovimientoJugador(${i})"`}>
+          <div class="move-head">
+            <span class="move-name">${m.nombre}</span>
+            <span class="move-rol">${ROL_LABEL[m.rol] || m.rol}</span>
+          </div>
+          <div class="move-desc">${m.descripcion || ''}</div>
+          <div class="move-meta">
+            <span>${dano}</span>
+            <span>Objetivo: ${OBJETIVO_LABEL[m.objetivo] || m.objetivo}</span>
+            <span class="move-cargas ${bloqueado ? 'falta' : 'ok'}">Cargas: ${m.costoCargas} (tienes ${personaje.cargasActuales || 0})</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function elegirMovimientoJugador(movIndex) {
+  const personaje = state.turnoJugadorPendiente.personaje;
+  const mov = personaje.movimientos[movIndex];
+  if ((personaje.cargasActuales || 0) < mov.costoCargas) return;
+
+  if (!necesitaSeleccionDeObjetivo(mov)) {
+    ejecutarMovimiento(personaje, movIndex, null);
+    resolverTurnoDelJugador();
+    return;
+  }
+  mostrarPanelDeObjetivo(personaje, movIndex);
+}
+
+function mostrarPanelDeObjetivo(personaje, movIndex) {
+  const mov = personaje.movimientos[movIndex];
+  const esAliado = mov.objetivo === 'aliado_1' || mov.objetivo === 'aliado_2';
+  const candidatos = esAliado
+    ? state[personaje.lado].campo.filter(c => c && c.vivo)
+    : poolObjetivosST(personaje);
+  const necesitaDos = mov.objetivo === 'aliado_2';
+
+  const overlay = document.getElementById('actionOverlay');
+  overlay.innerHTML = `
+    <div class="action-panel">
+      <h3>${mov.nombre} — elige ${necesitaDos ? '2 aliados' : (esAliado ? 'un aliado' : 'un objetivo')}</h3>
+      <div class="target-grid" id="targetGrid">
+        ${candidatos.map(c => `
+          <div class="target-card" data-instance="${c.instanceId}" onclick="elegirObjetivoJugador('${c.instanceId}')">
+            <div class="target-img">${cardArt(c, 26)}</div>
+            <div class="target-name">${c.nombre}<br>${Math.ceil(c.hpActual)}/${c.hpMaximo} HP</div>
+          </div>`).join('')}
+      </div>
+      ${necesitaDos ? '<div style="text-align:center;margin-top:12px;"><button class="btn" id="confirmarObjetivosBtn" style="display:none;" onclick="confirmarObjetivosDobles()">Confirmar</button></div>' : ''}
+    </div>
+  `;
+  state._seleccionObjetivo = { personaje, movIndex, necesitaDos, elegidos: [] };
+}
+
+function elegirObjetivoJugador(instanceId) {
+  const sel = state._seleccionObjetivo;
+  if (!sel) return;
+  const { personaje, movIndex, necesitaDos } = sel;
+  const candidato = [...state.jugador.campo, ...state.rival.campo].find(c => c && c.instanceId === instanceId);
+  if (!candidato) return;
+
+  if (!necesitaDos) {
+    state._seleccionObjetivo = null;
+    ejecutarMovimiento(personaje, movIndex, candidato);
+    resolverTurnoDelJugador();
+    return;
+  }
+
+  // aliado_2: alterna selección, hasta 2 elegidos
+  const idx = sel.elegidos.findIndex(c => c.instanceId === instanceId);
+  if (idx >= 0) sel.elegidos.splice(idx, 1);
+  else if (sel.elegidos.length < 2) sel.elegidos.push(candidato);
+
+  document.querySelectorAll('#targetGrid .target-card').forEach(el => {
+    el.classList.toggle('seleccionado', sel.elegidos.some(c => c.instanceId === el.dataset.instance));
+  });
+  const btn = document.getElementById('confirmarObjetivosBtn');
+  if (btn) btn.style.display = sel.elegidos.length === 2 ? 'inline-block' : 'none';
+}
+
+function confirmarObjetivosDobles() {
+  const sel = state._seleccionObjetivo;
+  if (!sel || sel.elegidos.length !== 2) return;
+  state._seleccionObjetivo = null;
+  ejecutarMovimiento(sel.personaje, sel.movIndex, sel.elegidos);
+  resolverTurnoDelJugador();
 }
 
 function showSidePanel(instanceId) {

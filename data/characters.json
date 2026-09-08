@@ -71,6 +71,7 @@
       {
         "rol": "basico",
         "nombre": "Katon: Ryūen Hōka",
+        "descripcion": "Aplica Quemadura de 20% sobre el objetivo, incrementa un 10% el daño elemental de todos los aliados en el campo.",
         "objetivo": "st",
         "costoCargas": 0,
         "cargasGeneradas": 2,
@@ -91,6 +92,7 @@
       {
         "rol": "especial",
         "nombre": "Susanoo",
+        "descripcion": "Si este ataque es crítico, causa un 25% de daño especial a cada enemigo. Roba todas las cargas del objetivo.",
         "objetivo": "st",
         "costoCargas": 4,
         "cargasGeneradas": 0,
@@ -110,6 +112,7 @@
       {
         "rol": "especial",
         "nombre": "Gudōdama",
+        "descripcion": "Este ataque golpea de 1 a 5 veces. Enemigos golpeados por este ataque reciben el efecto de estado Debilidad por 2 turnos. Por cada golpe crítico acertado por este ataque Madara Uchiha genera 4 cargas.",
         "objetivo": "mt",
         "costoCargas": 9,
         "cargasGeneradas": 0,
@@ -130,6 +133,7 @@
       {
         "rol": "ultimate",
         "nombre": "Chibaku Tensei",
+        "descripcion": "Por cada enemigo que sobreviva al ejecutar este ataque, incrementa un 20% (acumulable) el daño que causa este ataque.",
         "objetivo": "aoe",
         "costoCargas": 15,
         "cargasGeneradas": 0,
@@ -208,6 +212,7 @@
       {
         "rol": "basico",
         "nombre": "Puño de Acero",
+        "descripcion": "50% de probabilidad de aplicar Aturdimiento sobre el objetivo.",
         "objetivo": "st",
         "costoCargas": 0,
         "cargasGeneradas": 2,
@@ -223,6 +228,7 @@
       {
         "rol": "especial",
         "nombre": "Visión Térmica",
+        "descripcion": "Aplica Quemadura Solar sobre el objetivo. Si el enemigo atacado ya tenía Quemadura Solar antes de ejecutar este ataque, causa daño triple sobre el objetivo.",
         "objetivo": "st",
         "costoCargas": 5,
         "cargasGeneradas": 0,
@@ -240,6 +246,7 @@
       {
         "rol": "especial",
         "nombre": "Aliento Gélido",
+        "descripcion": "50% de probabilidad de aplicar Congelación sobre cada enemigo golpeado. Si el enemigo golpeado ya tenía Congelación antes de este ataque, aplica Mega Congelación y causa 120% de Daño Físico a todos los enemigos con Congelación o Mega Congelación activa.",
         "objetivo": "aoe",
         "costoCargas": 7,
         "cargasGeneradas": 0,
@@ -260,6 +267,7 @@
       {
         "rol": "ultimate",
         "nombre": "Prime One Million",
+        "descripcion": "Incrementa su HP Máximo un 50%. Se cura un 150%. Incrementa su Daño Físico, Daño Elemental y Daño Especial un 150%.",
         "objetivo": "self",
         "costoCargas": 12,
         "cargasGeneradas": 0,

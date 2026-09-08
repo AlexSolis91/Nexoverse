@@ -266,6 +266,10 @@ input, select, textarea {
   font-size: 10px;
   cursor: pointer;
 }
+.field-slot.turno-actual {
+  border-color: var(--legendario);
+  box-shadow: 0 0 14px 3px rgba(255, 215, 0, 0.75);
+}
 .fc-img {
   width: 100%; height: 107px;
   border-radius: 5px;
@@ -362,3 +366,63 @@ input, select, textarea {
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* Paneles de selección de Movimiento / Objetivo durante el turno del jugador */
+.action-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 12, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.action-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 20px;
+  width: min(720px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+}
+.action-panel h3 { margin-top: 0; }
+.move-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  background: var(--bg-panel-light);
+}
+.move-card:hover { border-color: var(--accent); }
+.move-card.bloqueado { opacity: 0.4; cursor: not-allowed; }
+.move-card .move-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.move-card .move-name { font-weight: 700; font-size: 15px; }
+.move-card .move-rol { font-size: 11px; color: var(--accent-2); text-transform: uppercase; }
+.move-card .move-desc { color: var(--text-dim); font-size: 12px; margin: 6px 0; }
+.move-card .move-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--text-dim); }
+.move-card .move-cargas { font-weight: 700; }
+.move-card .move-cargas.ok { color: var(--ok); }
+.move-card .move-cargas.falta { color: var(--danger); }
+
+.target-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.target-card {
+  width: 100px;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  text-align: center;
+  background: var(--bg-panel-light);
+}
+.target-card:hover { border-color: var(--accent); }
+.target-card.seleccionado { border-color: var(--legendario); box-shadow: 0 0 8px 2px rgba(255,215,0,0.6); }
+.target-card .target-img { width: 100%; height: 80px; background: linear-gradient(160deg, #2a3260, #10142a); display: flex; align-items: center; justify-content: center; }
+.target-card .target-name { font-size: 11px; padding: 4px; }
