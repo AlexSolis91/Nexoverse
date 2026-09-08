@@ -232,9 +232,9 @@ input, select, textarea {
   grid-template-rows: auto auto auto auto auto;
   gap: 6px;
 }
-.player-row { display: flex; align-items: center; gap: 14px; }
+.player-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
 .player-row.top { flex-direction: row; }
-.deck-box, .grave-box {
+.deck-box {
   width: 130px; height: 190px;
   border: 2px dashed var(--border);
   border-radius: 8px;
@@ -242,10 +242,10 @@ input, select, textarea {
   font-size: 11px; color: var(--text-dim);
   flex-direction: column;
   text-align: center;
+  flex-shrink: 0;
 }
 .hand-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.deck-cluster { display: flex; flex-direction: row; align-items: center; gap: 6px; }
-.field-slots { display: flex; gap: 10px; justify-content: flex-start; flex-wrap: wrap; }
+.field-slots { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .field-slot {
   /* proporción real de una carta de Yu-Gi-Oh (59x86mm ≈ 0.686 ancho/alto) */
   width: 130px; height: 190px;
