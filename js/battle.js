@@ -41,10 +41,17 @@ function makeBattleCharacter(template, rareza, lado, unlockCounts) {
   const desbloqueadas = unlockCounts[rareza] || 1;
   const pasivasActivas = (template.pasivas || []).slice(0, desbloqueadas);
   // los bonos pasivos de estadística ("siempre activos") de las pasivas ya desbloqueadas
-  // se suman de una vez a las stats base del personaje para esta batalla.
+  // se suman de una vez a las stats base del personaje para esta batalla. Las pasivas tipo
+  // "flag" (ej. ignora Armadura, inmune a Efectos de Estado) y "flagCondicionalHp" (ej. +daño
+  // o +Defensa con HP bajo) se guardan en `flags` y se consultan en vivo desde el motor de daño.
+  const flags = {};
   pasivasActivas.forEach(p => {
     if (p.modo === 'pasivo' && stats[p.stat] != null) {
       stats[p.stat] += p.valor;
+    } else if (p.modo === 'flag') {
+      flags[p.flag] = true;
+    } else if (p.modo === 'flagCondicionalHp') {
+      flags[p.tipo + 'CondicionalHp'] = p;
     }
   });
   return {
@@ -55,6 +62,7 @@ function makeBattleCharacter(template, rareza, lado, unlockCounts) {
     rareza,
     lado,
     stats,
+    flags,
     hpMaximo: stats.hp,
     hpActual: stats.hp,
     armaduraActual: stats.armadura,
@@ -203,6 +211,24 @@ function livingEnemies(personaje) {
   return state[enemigoLado].campo.filter(c => c && c.vivo);
 }
 
+// Objetivos reales de un ataque "a todos los enemigos" (AOE), respetando Mega Provocación:
+// si alguien del bando enemigo la tiene activa, TODO el ataque (daño + efectos) se redirige
+// solo a esa persona — nadie más del equipo recibe nada de ese ataque.
+function enemigosParaAoe(personaje) {
+  const enemigos = livingEnemies(personaje);
+  const megaProvocador = enemigos.find(e => NexoEffects.tieneEfecto(e, 'mega_provocacion'));
+  return megaProvocador ? [megaProvocador] : enemigos;
+}
+
+// Cuánto debe multiplicarse el daño por objetivo de un ataque AOE cuando Mega Provocación
+// colapsó el golpe de N enemigos en 1 solo — ese personaje absorbe lo que se habría repartido
+// entre todos, así que recibe daño_normal x N en vez de dividirse entre el equipo.
+function multiplicadorAoe(personaje, objetivosResueltos) {
+  const totalReal = Math.max(1, livingEnemies(personaje).length);
+  const totalResuelto = Math.max(1, objetivosResueltos.length);
+  return totalReal / totalResuelto;
+}
+
 function checkEffectsList(lista, personaje, gatilloId, contexto) {
   for (const item of lista || []) {
     if (item.modo !== 'tce' || item.gatillo !== gatilloId) continue;
@@ -241,7 +267,7 @@ function resolverObjetivos(objetivoTipo, personaje, contexto) {
     return aliados.length ? [aliados[Math.floor(Math.random() * aliados.length)]] : [];
   }
   if (objetivoTipo === 'todosAliados') return state[personaje.lado].campo.filter(c => c && c.vivo);
-  if (objetivoTipo === 'todosEnemigos') return livingEnemies(personaje);
+  if (objetivoTipo === 'todosEnemigos') return enemigosParaAoe(personaje);
   if (objetivoTipo === 'enemigoAleatorio') {
     const enemigos = livingEnemies(personaje);
     return enemigos.length ? [enemigos[Math.floor(Math.random() * enemigos.length)]] : [];
@@ -256,16 +282,19 @@ function resolverObjetivos(objetivoTipo, personaje, contexto) {
 // personaje se construye combinando estas — nunca se crea una acción exclusiva de un personaje.
 function ejecutarAccion(accion, personaje, contexto, objetivoTipo) {
   const objetivos = resolverObjetivos(objetivoTipo, personaje, contexto);
+  // si "todosEnemigos" se colapsó en 1 solo por Mega Provocación, ese daño se multiplica por
+  // cuántos habrían sido golpeados originalmente (ver enemigosParaAoe/multiplicadorAoe).
+  const multAoe = objetivoTipo === 'todosEnemigos' ? multiplicadorAoe(personaje, objetivos) : 1;
   objetivos.forEach(obj => {
     if (accion.tipo === 'dano') {
       let cantidad;
       if (accion.baseDeCalculo === 'hpMaximoObjetivo') {
         // daño = % del HP MÁXIMO del objetivo, no del stat del atacante (ej. pasiva Legendaria de Superman)
-        cantidad = obj.hpMaximo * (accion.pct / 100);
+        cantidad = obj.hpMaximo * (accion.pct / 100) * multAoe;
         NexoDamage.aplicarDano(obj, cantidad, log);
       } else {
         const extraMod = NexoEffects.modificadorDanoRecibidoPct(obj, accion.tipoDano, accion.subtipo);
-        ({ cantidad } = NexoDamage.calcularYAplicarDano(personaje, obj, accion.tipoDano, accion.pct, accion.subtipo, log, extraMod));
+        ({ cantidad } = NexoDamage.calcularYAplicarDano(personaje, obj, accion.tipoDano, accion.pct * multAoe, accion.subtipo, log, extraMod));
       }
       log(`${personaje.nombre} inflige ${cantidad.toFixed(1)} de daño ${accion.tipoDano} a ${obj.nombre} (pasiva/efecto).`);
       const eliminado = checkMuerte(obj);
@@ -338,6 +367,10 @@ function disiparCategoriasA(categoria) {
 }
 
 function aplicarEfectoEstadoPorId(id, objetivo, aplicador, pct, duracion) {
+  if (objetivo.flags && objetivo.flags.inmune_efectos_estado) {
+    log(`${objetivo.nombre} es inmune a los Efectos de Estado — ${id} no se aplica.`);
+    return;
+  }
   if (id === 'quemadura') NexoEffects.aplicarQuemadura(objetivo, aplicador.stats.danoElemental, pct, aplicador.instanceId);
   else if (id === 'veneno') NexoEffects.aplicarVeneno(objetivo, aplicador.stats.danoElemental, pct, aplicador.instanceId);
   else if (id === 'sangrado') NexoEffects.aplicarSangrado(objetivo, pct, aplicador.instanceId);
@@ -489,7 +522,8 @@ function resolverObjetivosDeMovimiento(personaje, mov, objetivoManual) {
   if (tipo === 'st' || tipo === 'aliado_1') return objetivoManual ? [objetivoManual] : [];
   if (tipo === 'aliado_2') return Array.isArray(objetivoManual) ? objetivoManual : (objetivoManual ? [objetivoManual] : []);
   if (tipo === 'self') return [personaje];
-  if (tipo === 'aoe' || tipo === 'mt') return livingEnemies(personaje);
+  if (tipo === 'aoe') return enemigosParaAoe(personaje); // respeta Mega Provocación
+  if (tipo === 'mt') return livingEnemies(personaje);
   if (tipo === 'todos_aliados') return state[personaje.lado].campo.filter(c => c && c.vivo);
   if (tipo === 'aliado_aleatorio_1') {
     const a = state[personaje.lado].campo.filter(c => c && c.vivo && c !== personaje);
@@ -528,22 +562,59 @@ function ejecutarMovimiento(personaje, movIndex, objetivoManual, contextoExtra) 
   }
 
   const objetivos = resolverObjetivosDeMovimiento(personaje, mov, objetivoManual);
+  // si un AOE se colapsó en 1 solo objetivo por Mega Provocación, multiplica su daño por
+  // cuántos habría golpeado originalmente (enemigosParaAoe ya hizo la redirección).
+  const multAoe = mov.objetivo === 'aoe' ? multiplicadorAoe(personaje, objetivos) : 1;
 
-  if (mov.golpes && mov.objetivo === 'mt') {
-    // Gudōdama: golpea de min a max veces, cada golpe elige un enemigo vivo al azar.
+  // Ejecución instantánea: si el movimiento la trae (ej. Golpe Serio Omnidireccional), cualquier
+  // objetivo que quede en ese % de HP o menos tras ser golpeado muere directo.
+  function verificarEjecucion(objetivo) {
+    if (mov.ejecutaSiHpMenorA != null && objetivo && objetivo.vivo && (objetivo.hpActual / objetivo.hpMaximo * 100) <= mov.ejecutaSiHpMenorA) {
+      log(`${personaje.nombre} elimina a ${objetivo.nombre} (${mov.nombre}: HP por debajo del umbral de ejecución).`);
+      objetivo.hpActual = 0;
+      checkMuerte(objetivo);
+    }
+  }
+
+  if (mov.golpes && mov.golpesDistintos) {
+    // Golpe Serio Omnidireccional: golpea N enemigos DISTINTOS al azar (no repite objetivo).
+    const n = mov.golpes.min + Math.floor(Math.random() * (mov.golpes.max - mov.golpes.min + 1));
+    shuffle(livingEnemies(personaje)).slice(0, n).forEach(t => {
+      golpearUnObjetivo(personaje, mov, t, null, { contextoExtra });
+      verificarEjecucion(t);
+    });
+  } else if (mov.golpes && mov.objetivo === 'mt') {
+    // Gudōdama: golpea de min a max veces, cada golpe elige un enemigo vivo al azar (puede repetir).
     const n = mov.golpes.min + Math.floor(Math.random() * (mov.golpes.max - mov.golpes.min + 1));
     for (let i = 0; i < n; i++) {
       const enemigos = livingEnemies(personaje);
       if (enemigos.length === 0) break;
-      golpearUnObjetivo(personaje, mov, enemigos[Math.floor(Math.random() * enemigos.length)], null, { contextoExtra });
+      const t = enemigos[Math.floor(Math.random() * enemigos.length)];
+      golpearUnObjetivo(personaje, mov, t, null, { contextoExtra });
+      verificarEjecucion(t);
     }
+  } else if (mov.golpes) {
+    // Golpes normales consecutivos: de min a max golpes, TODOS sobre el mismo objetivo elegido.
+    const n = mov.golpes.min + Math.floor(Math.random() * (mov.golpes.max - mov.golpes.min + 1));
+    for (let i = 0; i < n; i++) {
+      objetivos.forEach(t => { if (t.vivo) { golpearUnObjetivo(personaje, mov, t, null, { contextoExtra }); verificarEjecucion(t); } });
+    }
+  } else if (mov.multiplicaPorBuffsDisipados) {
+    // Golpe Serio: disipa los Buffs del objetivo y multiplica el daño por cuántos disipó.
+    objetivos.forEach(t => {
+      const buffsAntes = (t.efectos || []).filter(e => categoriaDeEfecto(e.id) === 'buffs').length;
+      t.efectos = (t.efectos || []).filter(e => categoriaDeEfecto(e.id) !== 'buffs');
+      if (buffsAntes > 0) log(`${personaje.nombre} disipa ${buffsAntes} buff(s) de ${t.nombre}.`);
+      if (buffsAntes > 0) golpearUnObjetivo(personaje, mov, t, mov.porcentaje * buffsAntes, { contextoExtra });
+      else log(`${mov.nombre} no causa daño: ${t.nombre} no tenía Buffs que disipar.`);
+    });
   } else if (mov.comboSiYaCongelado) {
     // Aliento Gélido: si un objetivo ya estaba Congelado, sube a Mega Congelación (sin roll) y
     // marca el combo; el combo dispara un golpe extra de 120% Físico a todos los Congelados/Mega.
     let algunoYaCongelado = false;
     objetivos.forEach(t => {
       if (!t.vivo) return;
-      golpearUnObjetivo(personaje, mov, t, null, { saltarEfectos: true, contextoExtra });
+      golpearUnObjetivo(personaje, mov, t, mov.porcentaje * multAoe, { saltarEfectos: true, contextoExtra });
       if (!t.vivo) return;
       const yaCongelado = NexoEffects.tieneEfecto(t, 'congelacion') || NexoEffects.tieneEfecto(t, 'mega_congelacion');
       if (yaCongelado) { aplicarEfectoEstadoPorId('mega_congelacion', t, personaje); algunoYaCongelado = true; }
@@ -568,7 +639,7 @@ function ejecutarMovimiento(personaje, movIndex, objetivoManual, contextoExtra) 
   } else if (mov.escalaPorSobreviviente != null) {
     // Chibaku Tensei: usa el bono acumulado de esta instancia, luego lo incrementa según
     // cuántos enemigos sobrevivieron a ESTA ejecución.
-    const pctFinal = mov.porcentaje + (mov.bonoAcumulado || 0);
+    const pctFinal = (mov.porcentaje + (mov.bonoAcumulado || 0)) * multAoe;
     objetivos.forEach(t => golpearUnObjetivo(personaje, mov, t, pctFinal, { contextoExtra }));
     const sobrevivientes = objetivos.filter(t => t.vivo).length;
     if (sobrevivientes > 0) {
@@ -576,7 +647,7 @@ function ejecutarMovimiento(personaje, movIndex, objetivoManual, contextoExtra) 
       log(`${mov.nombre} acumula +${sobrevivientes * mov.escalaPorSobreviviente}% de daño para la próxima vez.`);
     }
   } else if (mov.tipoDano) {
-    objetivos.forEach(t => golpearUnObjetivo(personaje, mov, t, null, { contextoExtra }));
+    objetivos.forEach(t => golpearUnObjetivo(personaje, mov, t, mov.objetivo === 'aoe' ? mov.porcentaje * multAoe : null, { contextoExtra }));
   } else {
     // Movimientos sin daño (ej. auto-buff como Prime One Million): igual disparan sus efectos.
     objetivos.forEach(t => checkEffectsList(mov.efectos, personaje, 'al_golpear', { objetivo: t }));
@@ -584,6 +655,11 @@ function ejecutarMovimiento(personaje, movIndex, objetivoManual, contextoExtra) 
 
   if (mov.cargasGeneradas) {
     personaje.cargasActuales = Math.min(CARGA_MAXIMA, (personaje.cargasActuales || 0) + mov.cargasGeneradas);
+  }
+  // Golpe Normal de Saitama: cada uso incrementa las Cargas que genera, para siempre.
+  if (mov.escalaCargasGeneradas) {
+    mov.cargasGeneradas = (mov.cargasGeneradas || 0) + mov.escalaCargasGeneradas;
+    log(`${mov.nombre} ahora generará ${mov.cargasGeneradas} Cargas la próxima vez.`);
   }
 }
 

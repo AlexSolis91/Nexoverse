@@ -282,5 +282,120 @@
         ]
       }
     ]
+  },
+  {
+    "id": "saitama",
+    "nombre": "Saitama",
+    "rareza": "comun",
+    "imagenUrl": "https://i.ibb.co/JFG5SnLb/Saitama.jpg",
+    "estadisticasBase": {
+      "hp": 10,
+      "regeneracion": 3,
+      "danoFisico": 10,
+      "danoElemental": 2,
+      "danoEspecial": 3,
+      "defensa": 2,
+      "velocidad": 9,
+      "sabiduria": 1,
+      "roboDeVida": 0.15,
+      "esquivar": 0.55,
+      "armadura": 0,
+      "critico": 0,
+      "bloqueo": 0,
+      "resHielo": 0,
+      "resVeneno": 0,
+      "resFuego": 0,
+      "resRayo": 0,
+      "resEspecial": 0
+    },
+    "pasivas": [
+      {
+        "modo": "flag",
+        "flag": "ignora_armadura_fisica",
+        "_descripcion": "El daño físico causado por Saitama ignora la Armadura del objetivo."
+      },
+      {
+        "modo": "flag",
+        "flag": "dano_triple_vs_provocacion",
+        "_descripcion": "Cuando Saitama golpea a un enemigo con Provocación o Mega Provocación activa, ese golpe causa daño triple (aplica a cualquiera de sus movimientos, no solo al básico)."
+      },
+      {
+        "modo": "flagCondicionalHp",
+        "tipo": "danoPropio",
+        "umbralPct": 50,
+        "bonoPct": 50,
+        "tipoDano": "fisico",
+        "_descripcion": "Cuando Saitama tiene 50% o menos de HP, +50% de daño físico adicional con cualquier ataque que cause daño físico."
+      },
+      {
+        "modo": "flag",
+        "flag": "inmune_efectos_estado",
+        "_descripcion": "Saitama es inmune a Efectos de Estado."
+      },
+      {
+        "modo": "flagCondicionalHp",
+        "tipo": "defensa",
+        "umbralPct": 50,
+        "bonoPct": 200,
+        "_descripcion": "Si Saitama tiene 50% de HP o menos, incrementa un 200% su Defensa."
+      }
+    ],
+    "movimientos": [
+      {
+        "rol": "basico",
+        "nombre": "Golpe Normal",
+        "descripcion": "Cada vez que este ataque es ejecutado, incrementa en +2 la cantidad de Cargas que este ataque genera (acumulable) por el resto de la partida.",
+        "objetivo": "st",
+        "costoCargas": 0,
+        "cargasGeneradas": 1,
+        "escalaCargasGeneradas": 2,
+        "tipoDano": "fisico",
+        "porcentaje": 90,
+        "efectos": []
+      },
+      {
+        "rol": "especial",
+        "nombre": "Golpes normales consecutivos",
+        "descripcion": "Este ataque golpea de 1 a 5 veces sobre el objetivo. Cada golpe tiene un 50% de probabilidad de aplicar Debilidad sobre el objetivo.",
+        "objetivo": "st",
+        "costoCargas": 4,
+        "cargasGeneradas": 0,
+        "tipoDano": "fisico",
+        "porcentaje": 35,
+        "golpes": { "min": 1, "max": 5 },
+        "efectos": [
+          {
+            "modo": "tce", "gatillo": "al_golpear", "condicion": "siempre", "probabilidad": 50, "objetivo": "objetivo",
+            "accion": { "tipo": "efectoEstado", "id": "debilidad", "pct": 10 }
+          }
+        ]
+      },
+      {
+        "rol": "especial",
+        "nombre": "Golpe Serio",
+        "descripcion": "Disipa todos los Buffs del objetivo y multiplica el daño de este ataque por cada Buff disipado del objetivo.",
+        "objetivo": "st",
+        "costoCargas": 7,
+        "cargasGeneradas": 0,
+        "tipoDano": "fisico",
+        "porcentaje": 200,
+        "multiplicaPorBuffsDisipados": true,
+        "efectos": []
+      },
+      {
+        "rol": "ultimate",
+        "nombre": "Golpe Serio Omnidireccional",
+        "descripcion": "Golpea de 3 a 5 enemigos aleatorios distintos. Si el enemigo golpeado por este ataque tiene 30% de su HP máx. o menos, elimina al objetivo.",
+        "objetivo": "mt",
+        "costoCargas": 15,
+        "cargasGeneradas": 0,
+        "tipoDano": "fisico",
+        "porcentaje": 150,
+        "golpes": { "min": 3, "max": 5 },
+        "golpesDistintos": true,
+        "ejecutaSiHpMenorA": 30,
+        "efectos": []
+      }
+    ]
   }
 ]

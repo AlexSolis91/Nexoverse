@@ -56,7 +56,9 @@
     { "id": "piel_de_piedra", "nombre": "Piel de Piedra", "stat": "defensa", "modo": "incrementa" },
     { "id": "potenciacion", "nombre": "Potenciación", "stat": "danoElemental", "modo": "incrementa" },
     { "id": "provocacion", "nombre": "Provocación", "stat": null, "modo": "comportamiento",
-      "descripcion": "Mientras está activa, cualquier ataque enemigo de objetivo único (ST) solo puede seleccionar a un personaje con Provocación activa." }
+      "descripcion": "Mientras está activa, cualquier ataque enemigo de objetivo único (ST) solo puede seleccionar a un personaje con Provocación activa." },
+    { "id": "mega_provocacion", "nombre": "Mega Provocación", "stat": null, "modo": "comportamiento",
+      "descripcion": "Mientras está activa, cualquier ataque AOE enemigo redirige TODO su daño y efectos únicamente al portador — el daño que se habría repartido entre todos los aliados se suma en su lugar sobre el portador (ej. 5 de daño x 5 aliados incluido él mismo = 25 de daño solo a él), y ningún otro aliado recibe daño ni efectos de ese ataque." }
   ],
   "debuffs": [
     { "id": "fatiga", "nombre": "Fatiga", "stat": "velocidad", "modo": "reduce" },

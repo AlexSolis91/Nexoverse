@@ -13,8 +13,18 @@ const NexoDamage = (() => {
     return 0;
   }
 
+  // La Defensa (para Físico) puede tener un bono CONDICIONAL (ej. "+200% Defensa con 50% o
+  // menos de HP") guardado en objetivo.flags.defensaCondicionalHp — se evalúa en vivo, nunca
+  // se hornea en stats.defensa, así que sube/baja solo según el HP actual sin arrastrar estado.
   function resistenciaCorrespondiente(objetivo, tipoDano, subtipo) {
-    if (tipoDano === 'fisico') return objetivo.stats.defensa || 0;
+    if (tipoDano === 'fisico') {
+      let defensa = objetivo.stats.defensa || 0;
+      const f = objetivo.flags && objetivo.flags.defensaCondicionalHp;
+      if (f && objetivo.hpActual / objetivo.hpMaximo <= f.umbralPct / 100) {
+        defensa = defensa * (1 + f.bonoPct / 100);
+      }
+      return defensa;
+    }
     if (tipoDano === 'especial') return objetivo.stats.resEspecial || 0;
     if (tipoDano === 'elemental') {
       if (subtipo === 'hielo') return objetivo.stats.resHielo || 0;
@@ -26,10 +36,11 @@ const NexoDamage = (() => {
     return 0;
   }
 
-  // aplica daño a un objetivo respetando la barra de Armadura antes que el HP
-  function aplicarDano(objetivo, cantidad, log) {
+  // aplica daño a un objetivo respetando la barra de Armadura antes que el HP — salvo que
+  // `ignorarArmadura` sea true (ej. pasiva de Saitama: su daño físico ignora la Armadura).
+  function aplicarDano(objetivo, cantidad, log, ignorarArmadura) {
     let restante = cantidad;
-    if (objetivo.armaduraActual > 0) {
+    if (!ignorarArmadura && objetivo.armaduraActual > 0) {
       const absorbido = Math.min(objetivo.armaduraActual, restante);
       objetivo.armaduraActual -= absorbido;
       restante -= absorbido;
@@ -49,12 +60,26 @@ const NexoDamage = (() => {
     let final = base * (1 - resistencia / 100);
     if (extraModPct) final = final * (1 + extraModPct / 100);
 
+    // Bono de daño propio condicional a HP bajo (ej. "+50% daño físico con 50% o menos de HP").
+    const bonoHp = atacante.flags && atacante.flags.danoPropioCondicionalHp;
+    if (bonoHp && (!bonoHp.tipoDano || bonoHp.tipoDano === tipoDano) && atacante.hpActual / atacante.hpMaximo <= bonoHp.umbralPct / 100) {
+      final = final * (1 + bonoHp.bonoPct / 100);
+    }
+
+    // Daño triple si el objetivo tiene Provocación o Mega Provocación activa (pasiva de Saitama,
+    // pero es un flag universal — cualquier personaje futuro podría tenerlo).
+    if (atacante.flags && atacante.flags.dano_triple_vs_provocacion &&
+        (NexoEffects.tieneEfecto(objetivo, 'provocacion') || NexoEffects.tieneEfecto(objetivo, 'mega_provocacion'))) {
+      final = final * 3;
+    }
+
     const probCritico = (atacante.stats.critico || 0) / 100;
     const esCritico = Math.random() < probCritico;
     if (esCritico) final = final * MULTIPLICADOR_CRITICO;
 
     final = Math.max(0, final);
-    aplicarDano(objetivo, final, log);
+    const ignorarArmadura = tipoDano === 'fisico' && atacante.flags && atacante.flags.ignora_armadura_fisica;
+    aplicarDano(objetivo, final, log, ignorarArmadura);
     return { cantidad: final, esCritico };
   }
 
