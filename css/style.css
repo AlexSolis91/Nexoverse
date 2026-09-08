@@ -224,13 +224,13 @@ input, select, textarea {
 .field-layout {
   display: grid;
   grid-template-columns: 220px 1fr;
-  gap: 20px;
-  padding: 20px;
+  gap: 12px;
+  padding: 6px;
 }
 .board {
   display: grid;
   grid-template-rows: auto auto auto auto auto;
-  gap: 14px;
+  gap: 6px;
 }
 .player-row { display: flex; align-items: center; gap: 14px; }
 .player-row.top { flex-direction: row; }
@@ -244,7 +244,7 @@ input, select, textarea {
   text-align: center;
 }
 .hand-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.deck-cluster { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.deck-cluster { display: flex; flex-direction: row; align-items: center; gap: 6px; }
 .field-slots { display: flex; gap: 10px; justify-content: flex-start; flex-wrap: wrap; }
 .field-slot {
   /* proporción real de una carta de Yu-Gi-Oh (59x86mm ≈ 0.686 ancho/alto) */
@@ -351,7 +351,7 @@ input, select, textarea {
 .phase-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
 
 .log-box {
-  max-height: 160px;
+  max-height: 55px;
   overflow-y: auto;
   background: var(--bg-panel);
   border: 1px solid var(--border);
